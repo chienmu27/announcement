@@ -10,7 +10,6 @@
         .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
         h1 { text-align: center; color: #2c3e50; margin-bottom: 15px; }
         
-        /* 公告說明樣式：改為兩欄排列 */
         #announcement { 
             color: #0056b3; 
             font-weight: bold; 
@@ -18,15 +17,12 @@
             margin-bottom: 20px; 
             white-space: pre-wrap; 
             line-height: 1.6;
-            
-            /* 核心修改：設定兩欄與欄間距 */
             column-count: 2;
             column-gap: 40px;
-            column-rule: 1px dashed #d1e3f8; /* 增加中間分隔線(選用) */
-            text-align: left; /* 靠左排列 */
+            column-rule: 1px dashed #d1e3f8;
+            text-align: left;
         }
 
-        /* 手機版自動切換回單欄，避免太擠 */
         @media (max-width: 600px) {
             #announcement { column-count: 1; }
         }
@@ -35,7 +31,7 @@
         label { display: block; margin-bottom: 8px; font-weight: bold; }
         select { width: 100%; padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #ced4da; }
         .table-responsive { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; min-width: 700px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; min-width: 600px; }
         th, td { border: 1px solid #dee2e6; padding: 12px 8px; text-align: center; }
         th { background: #2c3e50; color: white; white-space: nowrap; }
         tr:nth-child(even) { background: #f8f9fa; }
@@ -74,8 +70,8 @@
 
 <script>
     const config = {
-        start: { y: 2026, m: 2, d: 20, hr: 8, min: 0 }, 
-        end:   { y: 2026, m: 3, d: 30, hr: 17, min: 0 },
+        start: { y: 2026, m: 2, d: 26, hr: 18, min: 0 }, 
+        end:   { y: 2026, m: 3, d: 6, hr: 17, min: 0 },
         csvURL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSIzS-_hGz-62j8Ky4aUuJSpeaPTjSHOx85BGfjowRx4-wQQS6gk4ulyNI8GjD1SPhrQLeQpuVtOR9o/pub?gid=0&single=true&output=csv"
     };
 
@@ -119,6 +115,7 @@
     }
 
     let allData = [];
+    let validColumns = []; // 儲存標題列中有資料的欄位名稱
 
     function loadData() {
         Papa.parse(config.csvURL, {
@@ -129,8 +126,16 @@
                 allData = results.data;
                 
                 if (allData.length > 0) {
+                    // 1. 處理公告說明 (K2)
                     const info = allData[0]["公告說明"] || "歡迎查詢社團報名結果";
                     document.getElementById("announcement").textContent = info;
+
+                    // 2. 動態偵測 A:I 欄位 (排除 K 欄或無效欄位)
+                    // 取得 CSV 所有的 Key，並過濾掉空標題、公告說明
+                    const allKeys = Object.keys(allData[0]);
+                    validColumns = allKeys.filter(key => {
+                        return key.trim() !== "" && key !== "公告說明";
+                    });
                 }
                 renderClubOptions();
             },
@@ -170,32 +175,34 @@
         }
 
         const filtered = allData.filter(row => row["社團名稱"] === selectedClub);
-        let tableHtml = `
-            <table>
-                <thead>
-                    <tr>
-                        <th>年級</th><th>班級</th><th>座號</th><th>姓名</th><th>報名結果</th><th>開課日期</th><th>上課地點</th>
-                    </tr>
-                </thead>
-                <tbody>`;
         
-        filtered.forEach(row => {
-            const rawName = row["姓名(姓名中間字需顯示\"○\")"] || row["姓名"] || "";
-            const status = row["報名結果"] || "";
-            const startDate = row["開課日期"] || "";
-            const location = row["上課地點"] || "";
-            
-            tableHtml += `
-                <tr>
-                    <td>${row["年級"] || ""}</td>
-                    <td>${row["班級"] || ""}</td>
-                    <td>${row["座號"] || ""}</td>
-                    <td>${maskName(rawName)}</td>
-                    <td class="${status.includes('錄取') ? 'status-pass' : ''}">${status}</td>
-                    <td>${startDate}</td>
-                    <td>${location}</td>
-                </tr>`;
+        // --- 動態生成表格 ---
+        let tableHtml = `<table><thead><tr>`;
+        
+        // 生成表頭 (只針對有效欄位)
+        validColumns.forEach(col => {
+            tableHtml += `<th>${col}</th>`;
         });
+        tableHtml += `</tr></thead><tbody>`;
+        
+        // 生成內容
+        filtered.forEach(row => {
+            tableHtml += `<tr>`;
+            validColumns.forEach(col => {
+                let cellData = row[col] || "";
+                
+                // 特殊處理：姓名遮罩
+                if (col.includes("姓名")) {
+                    cellData = maskName(cellData);
+                }
+                
+                // 特殊處理：報名結果顏色
+                const isPass = col === "報名結果" && cellData.includes("錄取");
+                tableHtml += `<td class="${isPass ? 'status-pass' : ''}">${cellData}</td>`;
+            });
+            tableHtml += `</tr>`;
+        });
+        
         tableHtml += '</tbody></table>';
         resultArea.innerHTML = tableHtml;
     });
