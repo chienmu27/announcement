@@ -64,7 +64,6 @@
     </div>
 
     <div id="timeMessage" style="display:none;"></div>
-    
     <div class="timer-info" id="timerInfo"></div>
 </div>
 
@@ -96,7 +95,6 @@
 
         const displayStart = formatTimeDisplay(startTime);
         const displayEnd = formatTimeDisplay(endTime);
-
         timerInfo.innerHTML = `公告查詢期間：${displayStart} ~ ${displayEnd}`;
 
         if (now < startTime) {
@@ -115,7 +113,7 @@
     }
 
     let allData = [];
-    let validColumns = []; // 儲存標題列中有資料的欄位名稱
+    let validHeaders = []; // 用來存儲標題不為空的欄位名稱
 
     function loadData() {
         Papa.parse(config.csvURL, {
@@ -126,22 +124,16 @@
                 allData = results.data;
                 
                 if (allData.length > 0) {
-                    // 1. 處理公告說明 (K2)
+                    // 1. 處理公告說明 (K欄)
                     const info = allData[0]["公告說明"] || "歡迎查詢社團報名結果";
                     document.getElementById("announcement").textContent = info;
 
-                    // 2. 動態偵測 A:I 欄位 (排除 K 欄或無效欄位)
-                    // 取得 CSV 所有的 Key，並過濾掉空標題、公告說明
-                    const allKeys = Object.keys(allData[0]);
-                    validColumns = allKeys.filter(key => {
-                        return key.trim() !== "" && key !== "公告說明";
-                    });
+                    // 2. 自動偵測 A-I 欄位 (前9欄) 哪些標題是有資料的
+                    const allHeaders = results.meta.fields;
+                    // 只檢查前 9 個欄位，且標題不可為空、不可包含 "Unnamed"
+                    validHeaders = allHeaders.slice(0, 9).filter(h => h && !h.includes("Unnamed"));
                 }
                 renderClubOptions();
-            },
-            error: function() {
-                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>資料讀取失敗。</div>";
-                document.getElementById("announcement").textContent = "無法載入公告內容";
             }
         });
     }
@@ -176,33 +168,32 @@
 
         const filtered = allData.filter(row => row["社團名稱"] === selectedClub);
         
-        // --- 動態生成表格 ---
+        // 動態產生表格標題
         let tableHtml = `<table><thead><tr>`;
-        
-        // 生成表頭 (只針對有效欄位)
-        validColumns.forEach(col => {
-            tableHtml += `<th>${col}</th>`;
+        validHeaders.forEach(header => {
+            tableHtml += `<th>${header}</th>`;
         });
         tableHtml += `</tr></thead><tbody>`;
         
-        // 生成內容
+        // 動態填入資料
         filtered.forEach(row => {
             tableHtml += `<tr>`;
-            validColumns.forEach(col => {
-                let cellData = row[col] || "";
+            validHeaders.forEach(header => {
+                let cellValue = row[header] || "";
                 
-                // 特殊處理：姓名遮罩
-                if (col.includes("姓名")) {
-                    cellData = maskName(cellData);
+                // 針對姓名做特殊遮罩處理
+                if (header.includes("姓名")) {
+                    cellValue = maskName(cellValue);
                 }
                 
-                // 特殊處理：報名結果顏色
-                const isPass = col === "報名結果" && cellData.includes("錄取");
-                tableHtml += `<td class="${isPass ? 'status-pass' : ''}">${cellData}</td>`;
+                // 針對報名結果上色
+                let tdClass = (header === "報名結果" && cellValue.includes("錄取")) ? 'class="status-pass"' : '';
+                
+                tableHtml += `<td ${tdClass}>${cellValue}</td>`;
             });
             tableHtml += `</tr>`;
         });
-        
+
         tableHtml += '</tbody></table>';
         resultArea.innerHTML = tableHtml;
     });
