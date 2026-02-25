@@ -64,6 +64,7 @@
     </div>
 
     <div id="timeMessage" style="display:none;"></div>
+    
     <div class="timer-info" id="timerInfo"></div>
 </div>
 
@@ -95,6 +96,7 @@
 
         const displayStart = formatTimeDisplay(startTime);
         const displayEnd = formatTimeDisplay(endTime);
+
         timerInfo.innerHTML = `公告查詢期間：${displayStart} ~ ${displayEnd}`;
 
         if (now < startTime) {
@@ -124,16 +126,27 @@
                 allData = results.data;
                 
                 if (allData.length > 0) {
-                    // 1. 處理公告說明 (K欄)
+                    // 1. 處理公告說明
                     const info = allData[0]["公告說明"] || "歡迎查詢社團報名結果";
                     document.getElementById("announcement").textContent = info;
 
-                    // 2. 自動偵測 A-I 欄位 (前9欄) 哪些標題是有資料的
-                    const allHeaders = results.meta.fields;
-                    // 只檢查前 9 個欄位，且標題不可為空、不可包含 "Unnamed"
-                    validHeaders = allHeaders.slice(0, 9).filter(h => h && !h.includes("Unnamed"));
+                    // 2. 自動偵測有資料的標題欄位 (排除 "公告說明" 且標題不可為空或以 __parsed 開頭)
+                    // 我們只檢查前幾欄 (A:I)
+                    const potentialHeaders = ["年級", "班級", "座號", "姓名(姓名中間字需顯示\"○\")", "報名結果", "開課日期", "上課地點"];
+                    // 實際檢查：如果 row[0] 中該 key 存在且不是 undefined，則納入顯示清單
+                    const firstRowKeys = Object.keys(allData[0]);
+                    validHeaders = firstRowKeys.filter(key => 
+                        key.trim() !== "" && 
+                        key !== "公告說明" && 
+                        key !== "社團名稱" && 
+                        !key.startsWith("__parsed")
+                    );
                 }
                 renderClubOptions();
+            },
+            error: function() {
+                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>資料讀取失敗。</div>";
+                document.getElementById("announcement").textContent = "無法載入公告內容";
             }
         });
     }
@@ -168,32 +181,37 @@
 
         const filtered = allData.filter(row => row["社團名稱"] === selectedClub);
         
-        // 動態產生表格標題
+        // 動態生成表格標題列
         let tableHtml = `<table><thead><tr>`;
         validHeaders.forEach(header => {
-            tableHtml += `<th>${header}</th>`;
+            // 處理姓名顯示簡化標籤
+            let displayHeader = header.includes("姓名") ? "姓名" : header;
+            tableHtml += `<th>${displayHeader}</th>`;
         });
         tableHtml += `</tr></thead><tbody>`;
         
-        // 動態填入資料
+        // 動態生成表格內容列
         filtered.forEach(row => {
             tableHtml += `<tr>`;
             validHeaders.forEach(header => {
-                let cellValue = row[header] || "";
+                let cellData = row[header] || "";
                 
-                // 針對姓名做特殊遮罩處理
+                // 如果是姓名欄位，執行遮罩
                 if (header.includes("姓名")) {
-                    cellValue = maskName(cellValue);
+                    cellData = maskName(cellData);
                 }
                 
-                // 針對報名結果上色
-                let tdClass = (header === "報名結果" && cellValue.includes("錄取")) ? 'class="status-pass"' : '';
-                
-                tableHtml += `<td ${tdClass}>${cellValue}</td>`;
+                // 處理報名結果顏色
+                if (header === "報名結果") {
+                    const statusClass = cellData.includes('錄取') ? 'class="status-pass"' : '';
+                    tableHtml += `<td ${statusClass}>${cellData}</td>`;
+                } else {
+                    tableHtml += `<td>${cellData}</td>`;
+                }
             });
             tableHtml += `</tr>`;
         });
-
+        
         tableHtml += '</tbody></table>';
         resultArea.innerHTML = tableHtml;
     });
