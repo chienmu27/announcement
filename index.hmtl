@@ -59,7 +59,17 @@ tr:nth-child(even){
   padding:20px;
   color:#888;
 }
+
+.loading{
+  text-align:center;
+  padding:20px;
+  color:#555;
+}
 </style>
+
+<!-- 使用專業CSV解析 -->
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
 </head>
 
 <body>
@@ -68,10 +78,10 @@ tr:nth-child(even){
   <h1>東海國小114下社團報名結果公告</h1>
 
   <select id="clubSelect">
-    <option value="">請選擇社團</option>
+    <option value="">資料載入中...</option>
   </select>
 
-  <div id="resultArea"></div>
+  <div id="resultArea" class="loading">正在讀取資料...</div>
 </div>
 
 <script>
@@ -80,26 +90,42 @@ const sheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSIzS-_hGz-62j
 
 let allData = [];
 
-async function loadData(){
-  const response = await fetch(sheetURL);
-  const data = await response.text();
+function loadData(){
 
-  const rows = data.split("\n").map(row => row.split(","));
-  const headers = rows[0];
-  allData = rows.slice(1);
+  Papa.parse(sheetURL, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: function(results) {
 
-  generateClubOptions();
+      allData = results.data;
+
+      generateClubOptions();
+
+      document.getElementById("resultArea").innerHTML = "";
+    },
+    error: function(error){
+      document.getElementById("resultArea").innerHTML = 
+        "<div class='no-data'>資料載入失敗，請確認試算表已發布為CSV</div>";
+    }
+  });
+
 }
 
 function generateClubOptions(){
+
   const clubSet = new Set();
+
   allData.forEach(row=>{
-    if(row[0]) clubSet.add(row[0]);
+    if(row["社團名稱"]){
+      clubSet.add(row["社團名稱"].trim());
+    }
   });
 
   const select = document.getElementById("clubSelect");
+  select.innerHTML = "<option value=''>請選擇社團</option>";
 
-  clubSet.forEach(club=>{
+  Array.from(clubSet).sort().forEach(club=>{
     const option = document.createElement("option");
     option.value = club;
     option.textContent = club;
@@ -108,6 +134,7 @@ function generateClubOptions(){
 }
 
 document.getElementById("clubSelect").addEventListener("change", function(){
+
   const selectedClub = this.value;
   const resultArea = document.getElementById("resultArea");
 
@@ -116,7 +143,9 @@ document.getElementById("clubSelect").addEventListener("change", function(){
     return;
   }
 
-  const filtered = allData.filter(row => row[0] === selectedClub);
+  const filtered = allData.filter(row => 
+    row["社團名稱"] === selectedClub
+  );
 
   if(filtered.length === 0){
     resultArea.innerHTML = "<div class='no-data'>查無資料</div>";
@@ -140,11 +169,11 @@ document.getElementById("clubSelect").addEventListener("change", function(){
   filtered.forEach(row=>{
     html += `
       <tr>
-        <td>${row[1]}</td>
-        <td>${row[2]}</td>
-        <td>${row[3]}</td>
-        <td>${row[4]}</td>
-        <td>${row[5]}</td>
+        <td>${row["年級"] || ""}</td>
+        <td>${row["班級"] || ""}</td>
+        <td>${row["座號"] || ""}</td>
+        <td>${row["姓名(姓名中間字顯示\"○\")"] || ""}</td>
+        <td>${row["報名結果"] || ""}</td>
       </tr>
     `;
   });
@@ -152,6 +181,7 @@ document.getElementById("clubSelect").addEventListener("change", function(){
   html += "</tbody></table>";
 
   resultArea.innerHTML = html;
+
 });
 
 loadData();
