@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>東海國小114下社團報名結果公告</title>
+
+<style>
+body{
+  font-family: Arial, Helvetica, sans-serif;
+  background:#f4f6f9;
+  margin:0;
+  padding:30px;
+}
+
+.container{
+  max-width:1000px;
+  margin:auto;
+  background:white;
+  padding:30px;
+  border-radius:10px;
+  box-shadow:0 5px 15px rgba(0,0,0,0.1);
+}
+
+h1{
+  text-align:center;
+  margin-bottom:30px;
+}
+
+select{
+  width:100%;
+  padding:10px;
+  font-size:16px;
+  margin-bottom:20px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th, td{
+  border:1px solid #ddd;
+  padding:10px;
+  text-align:center;
+}
+
+th{
+  background:#2c3e50;
+  color:white;
+}
+
+tr:nth-child(even){
+  background:#f2f2f2;
+}
+
+.no-data{
+  text-align:center;
+  padding:20px;
+  color:#888;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <h1>東海國小114下社團報名結果公告</h1>
+
+  <select id="clubSelect">
+    <option value="">請選擇社團</option>
+  </select>
+
+  <div id="resultArea"></div>
+</div>
+
+<script>
+
+const sheetURL = "https://docs.google.com/spreadsheets/d/1yl-TqMmKUwJI5PHH3TPeqoXxrc5vDYr5LD_x5siec90/pub?output=csv";
+
+let allData = [];
+
+async function loadData(){
+  const response = await fetch(sheetURL);
+  const data = await response.text();
+
+  const rows = data.split("\n").map(row => row.split(","));
+  const headers = rows[0];
+  allData = rows.slice(1);
+
+  generateClubOptions();
+}
+
+function generateClubOptions(){
+  const clubSet = new Set();
+  allData.forEach(row=>{
+    if(row[0]) clubSet.add(row[0]);
+  });
+
+  const select = document.getElementById("clubSelect");
+
+  clubSet.forEach(club=>{
+    const option = document.createElement("option");
+    option.value = club;
+    option.textContent = club;
+    select.appendChild(option);
+  });
+}
+
+document.getElementById("clubSelect").addEventListener("change", function(){
+  const selectedClub = this.value;
+  const resultArea = document.getElementById("resultArea");
+
+  if(!selectedClub){
+    resultArea.innerHTML = "";
+    return;
+  }
+
+  const filtered = allData.filter(row => row[0] === selectedClub);
+
+  if(filtered.length === 0){
+    resultArea.innerHTML = "<div class='no-data'>查無資料</div>";
+    return;
+  }
+
+  let html = `
+  <table>
+    <thead>
+      <tr>
+        <th>年級</th>
+        <th>班級</th>
+        <th>座號</th>
+        <th>姓名</th>
+        <th>報名結果</th>
+      </tr>
+    </thead>
+    <tbody>
+  `;
+
+  filtered.forEach(row=>{
+    html += `
+      <tr>
+        <td>${row[1]}</td>
+        <td>${row[2]}</td>
+        <td>${row[3]}</td>
+        <td>${row[4]}</td>
+        <td>${row[5]}</td>
+      </tr>
+    `;
+  });
+
+  html += "</tbody></table>";
+
+  resultArea.innerHTML = html;
+});
+
+loadData();
+
+</script>
+
+</body>
+</html>
