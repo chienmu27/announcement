@@ -67,7 +67,6 @@ tr:nth-child(even){
 }
 </style>
 
-<!-- 使用專業CSV解析 -->
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 </head>
@@ -94,19 +93,20 @@ function loadData(){
 
   Papa.parse(sheetURL, {
     download: true,
-    header: true,
+    header: false,   // 🔥 不使用標題當key
     skipEmptyLines: true,
     complete: function(results) {
 
-      allData = results.data;
+      // 第0列是標題，移除
+      allData = results.data.slice(1);
 
       generateClubOptions();
 
       document.getElementById("resultArea").innerHTML = "";
     },
-    error: function(error){
+    error: function(){
       document.getElementById("resultArea").innerHTML = 
-        "<div class='no-data'>資料載入失敗，請確認試算表已發布為CSV</div>";
+        "<div class='no-data'>資料載入失敗，請確認試算表已發佈為CSV</div>";
     }
   });
 
@@ -117,8 +117,8 @@ function generateClubOptions(){
   const clubSet = new Set();
 
   allData.forEach(row=>{
-    if(row["社團名稱"]){
-      clubSet.add(row["社團名稱"].trim());
+    if(row[0]){
+      clubSet.add(row[0].trim());
     }
   });
 
@@ -143,9 +143,7 @@ document.getElementById("clubSelect").addEventListener("change", function(){
     return;
   }
 
-  const filtered = allData.filter(row => 
-    row["社團名稱"] === selectedClub
-  );
+  const filtered = allData.filter(row => row[0] === selectedClub);
 
   if(filtered.length === 0){
     resultArea.innerHTML = "<div class='no-data'>查無資料</div>";
@@ -169,11 +167,11 @@ document.getElementById("clubSelect").addEventListener("change", function(){
   filtered.forEach(row=>{
     html += `
       <tr>
-        <td>${row["年級"] || ""}</td>
-        <td>${row["班級"] || ""}</td>
-        <td>${row["座號"] || ""}</td>
-        <td>${row["姓名(姓名中間字顯示\"○\")"] || ""}</td>
-        <td>${row["報名結果"] || ""}</td>
+        <td>${row[1] || ""}</td>
+        <td>${row[2] || ""}</td>
+        <td>${row[3] || ""}</td>
+        <td>${row[4] || ""}</td>
+        <td>${row[5] || ""}</td>
       </tr>
     `;
   });
