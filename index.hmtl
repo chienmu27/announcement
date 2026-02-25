@@ -76,7 +76,7 @@ tr:nth-child(even){
 
 <script>
 
-const sheetURL = "https://docs.google.com/spreadsheets/d/1yl-TqMmKUwJI5PHH3TPeqoXxrc5vDYr5LD_x5siec90/pub?output=csv";
+const sheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSIzS-_hGz-62j8Ky4aUuJSpeaPTjSHOx85BGfjowRx4-wQQS6gk4ulyNI8GjD1SPhrQLeQpuVtOR9o/pub?gid=0&single=true&output=csv";
 
 let allData = [];
 
