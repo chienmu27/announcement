@@ -64,7 +64,6 @@
     </div>
 
     <div id="timeMessage" style="display:none;"></div>
-    
     <div class="timer-info" id="timerInfo"></div>
 </div>
 
@@ -115,7 +114,7 @@
     }
 
     let allData = [];
-    let validHeaders = []; // 用來存儲標題不為空的欄位名稱
+    let validHeaders = []; // 用來存儲有標題名稱的欄位
 
     function loadData() {
         Papa.parse(config.csvURL, {
@@ -126,21 +125,17 @@
                 allData = results.data;
                 
                 if (allData.length > 0) {
-                    // 1. 處理公告說明
+                    // 1. 處理公告內容
                     const info = allData[0]["公告說明"] || "歡迎查詢社團報名結果";
                     document.getElementById("announcement").textContent = info;
 
-                    // 2. 自動偵測有資料的標題欄位 (排除 "公告說明" 且標題不可為空或以 __parsed 開頭)
-                    // 我們只檢查前幾欄 (A:I)
-                    const potentialHeaders = ["年級", "班級", "座號", "姓名(姓名中間字需顯示\"○\")", "報名結果", "開課日期", "上課地點"];
-                    // 實際檢查：如果 row[0] 中該 key 存在且不是 undefined，則納入顯示清單
-                    const firstRowKeys = Object.keys(allData[0]);
-                    validHeaders = firstRowKeys.filter(key => 
-                        key.trim() !== "" && 
-                        key !== "公告說明" && 
-                        key !== "社團名稱" && 
-                        !key.startsWith("__parsed")
-                    );
+                    // 2. 動態偵測有效欄位 (排除空白標題與公告說明)
+                    // 取得第一行所有的 key (標題)
+                    const rawHeaders = Object.keys(allData[0]);
+                    validHeaders = rawHeaders.filter(h => {
+                        // 排除自動生成的 "_數字"、空白標題、以及功能性的 "公告說明"
+                        return h.trim() !== "" && !h.startsWith("__parsed_extra") && !h.startsWith("_") && h !== "公告說明";
+                    });
                 }
                 renderClubOptions();
             },
@@ -181,33 +176,32 @@
 
         const filtered = allData.filter(row => row["社團名稱"] === selectedClub);
         
-        // 動態生成表格標題列
+        // --- 動態生成表格 ---
         let tableHtml = `<table><thead><tr>`;
+        
+        // 生成有資料的標題列
         validHeaders.forEach(header => {
-            // 處理姓名顯示簡化標籤
+            // 修正顯示名稱：將長標題簡化顯示或保持原樣
             let displayHeader = header.includes("姓名") ? "姓名" : header;
             tableHtml += `<th>${displayHeader}</th>`;
         });
         tableHtml += `</tr></thead><tbody>`;
         
-        // 動態生成表格內容列
+        // 生成內容列
         filtered.forEach(row => {
             tableHtml += `<tr>`;
             validHeaders.forEach(header => {
                 let cellData = row[header] || "";
                 
-                // 如果是姓名欄位，執行遮罩
+                // 特殊處理：姓名遮罩
                 if (header.includes("姓名")) {
                     cellData = maskName(cellData);
                 }
                 
-                // 處理報名結果顏色
-                if (header === "報名結果") {
-                    const statusClass = cellData.includes('錄取') ? 'class="status-pass"' : '';
-                    tableHtml += `<td ${statusClass}>${cellData}</td>`;
-                } else {
-                    tableHtml += `<td>${cellData}</td>`;
-                }
+                // 特殊處理：錄取狀態顏色
+                let tdClass = (header === "報名結果" && cellData.includes('錄取')) ? 'class="status-pass"' : '';
+                
+                tableHtml += `<td ${tdClass}>${cellData}</td>`;
             });
             tableHtml += `</tr>`;
         });
