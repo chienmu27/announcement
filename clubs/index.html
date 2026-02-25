@@ -19,7 +19,7 @@
         tr:nth-child(even) { background: #f8f9fa; }
         .no-data { text-align: center; padding: 40px; color: #6c757d; font-size: 18px; line-height: 1.6; }
         .status-pass { color: #28a745; font-weight: bold; }
-        .timer-info { text-align: center; font-size: 0.9em; color: #666; margin-top: 10px; }
+        .timer-info { text-align: center; font-size: 0.9em; color: #888; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px; }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -49,18 +49,28 @@
 </div>
 
 <script>
-    // --- 【管理員設定區】 ---
+    // --- 【管理員設定區：直覺輸入法】 ---
     const config = {
-        // 設定開始公告時間 (年, 月-1, 日, 時, 分) 註：月份從0開始，1代表2月
-        startTime: new Date(2026, 2, 26, 17, 00), // 2025年2月20日 08:00
-        // 設定結束公告時間
-        endTime: new Date(2026, 3, 6, 17, 00),   // 2025年3月30日 17:00
+        // 直接輸入國曆月份即可 (例如: 2 代表 2月)
+        start: { y: 2026, m: 2, d: 25, hr: 10, min: 5 }, 
+        end:   { y: 2026, m: 3, d: 6, hr: 17, min: 0 },
         
         csvURL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSIzS-_hGz-62j8Ky4aUuJSpeaPTjSHOx85BGfjowRx4-wQQS6gk4ulyNI8GjD1SPhrQLeQpuVtOR9o/pub?gid=0&single=true&output=csv"
     };
-    // -----------------------
 
-    let allData = [];
+    // 轉換為 JS Date 物件 (在此統一處理月份減 1 的問題)
+    const startTime = new Date(config.start.y, config.start.m - 1, config.start.d, config.start.hr, config.start.min);
+    const endTime = new Date(config.end.y, config.end.m - 1, config.end.d, config.end.hr, config.end.min);
+
+    function formatTimeDisplay(dateObj) {
+        // 自定義格式化，避免瀏覽器 Locale 差異導致顯示錯誤
+        const y = dateObj.getFullYear();
+        const m = dateObj.getMonth() + 1;
+        const d = dateObj.getDate();
+        const hr = String(dateObj.getHours()).padStart(2, '0');
+        const min = String(dateObj.getMinutes()).padStart(2, '0');
+        return `${y}/${m}/${d} ${hr}:${min}`;
+    }
 
     function checkTimeAndInit() {
         const now = new Date();
@@ -68,24 +78,26 @@
         const timeMessage = document.getElementById("timeMessage");
         const timerInfo = document.getElementById("timerInfo");
 
-        // 顯示公告區段給使用者參考 (選填)
-        timerInfo.innerHTML = `公告期間：${config.startTime.toLocaleString()} ~ ${config.endTime.toLocaleString()}`;
+        const displayStart = formatTimeDisplay(startTime);
+        const displayEnd = formatTimeDisplay(endTime);
 
-        if (now < config.startTime) {
-            // 尚未開始
+        timerInfo.innerHTML = `公告查詢期間：${displayStart} ~ ${displayEnd}`;
+
+        if (now < startTime) {
             mainContent.style.display = "none";
             timeMessage.style.display = "block";
-            timeMessage.innerHTML = `<div class="no-data">目前尚未開放查詢。<br>公告開始時間：${config.startTime.toLocaleString()}</div>`;
-        } else if (now > config.endTime) {
-            // 已經結束
+            timeMessage.innerHTML = `<div class="no-data">目前尚未開放查詢。<br>公告開始時間：${displayStart}</div>`;
+        } else if (now > endTime) {
             mainContent.style.display = "none";
             timeMessage.style.display = "block";
-            timeMessage.innerHTML = `<div class="no-data">公告查詢期限已過。<br>如有疑問請洽本校教務處。</div>`;
+            timeMessage.innerHTML = `<div class="no-data">公告查詢期限已過 (${displayEnd})。<br>如有疑問請洽本校教務處。</div>`;
         } else {
-            // 在時間範圍內，執行資料讀取
             loadData();
         }
     }
+
+    // --- 資料處理區 ---
+    let allData = [];
 
     function loadData() {
         Papa.parse(config.csvURL, {
@@ -97,7 +109,7 @@
                 renderClubOptions();
             },
             error: function() {
-                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>資料讀取失敗。</div>";
+                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>資料讀取失敗，請檢查網路。</div>";
             }
         });
     }
@@ -105,7 +117,6 @@
     function renderClubOptions() {
         const clubSelect = document.getElementById("clubSelect");
         const clubs = [...new Set(allData.map(item => item["社團名稱"]))].filter(c => c).sort();
-
         clubSelect.innerHTML = '<option value="">-- 請選擇社團 --</option>';
         clubs.forEach(club => {
             const option = document.createElement("option");
@@ -116,7 +127,6 @@
         clubSelect.disabled = false;
     }
 
-    // 姓名遮罩 logic
     function maskName(name) {
         if (!name || name.includes("○")) return name;
         if (name.length <= 1) return name;
@@ -127,7 +137,6 @@
     document.getElementById("clubSelect").addEventListener("change", function() {
         const selectedClub = this.value;
         const resultArea = document.getElementById("resultArea");
-
         if (!selectedClub) {
             resultArea.innerHTML = '<div class="no-data">請先從上方選單選擇社團</div>';
             return;
@@ -135,26 +144,15 @@
 
         const filtered = allData.filter(row => row["社團名稱"] === selectedClub);
         let tableHtml = `<table><thead><tr><th>年級</th><th>班級</th><th>座號</th><th>姓名</th><th>報名結果</th></tr></thead><tbody>`;
-
         filtered.forEach(row => {
             const rawName = row["姓名(姓名中間字需顯示\"○\")"] || row["姓名"] || "";
             const status = row["報名結果"] || "";
-            tableHtml += `
-                <tr>
-                    <td>${row["年級"] || ""}</td>
-                    <td>${row["班級"] || ""}</td>
-                    <td>${row["座號"] || ""}</td>
-                    <td>${maskName(rawName)}</td>
-                    <td class="${status.includes('錄取') ? 'status-pass' : ''}">${status}</td>
-                </tr>
-            `;
+            tableHtml += `<tr><td>${row["年級"] || ""}</td><td>${row["班級"] || ""}</td><td>${row["座號"] || ""}</td><td>${maskName(rawName)}</td><td class="${status.includes('錄取') ? 'status-pass' : ''}">${status}</td></tr>`;
         });
-
         tableHtml += '</tbody></table>';
         resultArea.innerHTML = tableHtml;
     });
 
-    // 執行檢查
     checkTimeAndInit();
 </script>
 
