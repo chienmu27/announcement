@@ -8,24 +8,34 @@
     <style>
         body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
         .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #2c3e50; margin-bottom: 10px; }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 15px; }
         
-        /* 公告說明樣式 */
+        /* 公告說明樣式：改為兩欄排列 */
         #announcement { 
-            text-align: center; 
             color: #0056b3; 
             font-weight: bold; 
-            font-size: 1.2em; 
-            margin-bottom: 25px; 
-            white-space: pre-wrap; /* 支援試算表內的換行 */
-            line-height: 1.5;
+            font-size: 1em; 
+            margin-bottom: 20px; 
+            white-space: pre-wrap; 
+            line-height: 1.6;
+            
+            /* 核心修改：設定兩欄與欄間距 */
+            column-count: 2;
+            column-gap: 40px;
+            column-rule: 1px dashed #d1e3f8; /* 增加中間分隔線(選用) */
+            text-align: left; /* 靠左排列 */
+        }
+
+        /* 手機版自動切換回單欄，避免太擠 */
+        @media (max-width: 600px) {
+            #announcement { column-count: 1; }
         }
 
         .controls { margin-bottom: 20px; background: #e9ecef; padding: 20px; border-radius: 8px; }
         label { display: block; margin-bottom: 8px; font-weight: bold; }
         select { width: 100%; padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #ced4da; }
         .table-responsive { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; min-width: 600px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; min-width: 700px; }
         th, td { border: 1px solid #dee2e6; padding: 12px 8px; text-align: center; }
         th { background: #2c3e50; color: white; white-space: nowrap; }
         tr:nth-child(even) { background: #f8f9fa; }
@@ -63,7 +73,6 @@
 </div>
 
 <script>
-    // --- 【管理員設定區】 ---
     const config = {
         start: { y: 2026, m: 2, d: 20, hr: 8, min: 0 }, 
         end:   { y: 2026, m: 3, d: 30, hr: 17, min: 0 },
@@ -119,17 +128,14 @@
             complete: function(results) {
                 allData = results.data;
                 
-                // 讀取「公告說明」(K欄) 的內容
-                // 預設讀取第一筆資料中的公告內容
                 if (allData.length > 0) {
                     const info = allData[0]["公告說明"] || "歡迎查詢社團報名結果";
                     document.getElementById("announcement").textContent = info;
                 }
-
                 renderClubOptions();
             },
             error: function() {
-                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>資料讀取失敗，請檢查網路。</div>";
+                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>資料讀取失敗。</div>";
                 document.getElementById("announcement").textContent = "無法載入公告內容";
             }
         });
