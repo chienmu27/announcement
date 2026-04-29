@@ -40,11 +40,17 @@
         }
         
         .table-responsive { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; min-width: 600px; }
-        th, td { border: 1px solid #dee2e6; padding: 12px 8px; text-align: center; }
-        th { background: #2c3e50; color: white; white-space: nowrap; }
-        tr:nth-child(even) { background: #f8f9fa; }
         
+        /* 修改為直式表格樣式 */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; border: 1px solid #dee2e6; }
+        th, td { border: 1px solid #dee2e6; padding: 12px 15px; text-align: left; }
+        th { background: #2c3e50; color: white; width: 35%; white-space: nowrap; }
+        td { background: white; color: #333; }
+        
+        /* 多筆資料時的間隔 */
+        .result-block { margin-bottom: 30px; border-bottom: 3px double #2c3e50; padding-bottom: 10px; }
+        .result-block:last-child { border-bottom: none; }
+
         .no-data { text-align: center; padding: 40px; color: #6c757d; font-size: 18px; line-height: 1.6; }
         .timer-info { text-align: center; font-size: 0.9em; color: #888; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px; }
 
@@ -107,18 +113,12 @@
 <script>
     // --- 試算表連結配置 ---
     const SHEET_CONFIG = {
-        // 設定工作表 (需在試算表內將此分頁「發佈到網路」為 CSV)
         settingsCSV: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTG5N08Vj2l_tiJM4DxAngrIx3y_xpjx1EeGjJPCExm2eGkq8JDPjf1TUCRXBYUKBUsvz0P8Asg-3C/pub?gid=727667803&single=true&output=csv",
-        
-        // 資料工作表 (工作表1，需發佈為 CSV)
         dataCSV: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTG5N08Vj2l_tiJM4DxAngrIx3y_xpjx1EeGjJPCExm2eGkq8JDPjf1TUCRXBYUKBUsvz0P8Asg-3C/pub?gid=1326972968&single=true&output=csv"
     };
 
-    let config = {
-        pwd: "", start: "", end: "", range: "", queryCol: "", msg: ""
-    };
+    let config = { pwd: "", start: "", end: "", range: "", queryCol: "", msg: "" };
 
-    // 1. 初始化：從「設定」工作表抓取參數
     function fetchSettings() {
         const url = SHEET_CONFIG.settingsCSV + "&t=" + new Date().getTime();
         Papa.parse(url, {
@@ -126,33 +126,27 @@
             complete: function(results) {
                 const rows = results.data;
                 if (rows.length >= 6) {
-                    // 對應 B1 到 B6 (索引為 rows[0][1] 到 rows[5][1])
-                    config.pwd      = rows[0][1]; // B1: 驗證碼
-                    config.range    = rows[1][1]; // B2: 欄位範圍 (如 A:D)
-                    config.queryCol = rows[2][1]; // B3: 下拉選單欄位 (如 A)
-                    config.start    = rows[3][1]; // B4: 開始日期
-                    config.end      = rows[4][1]; // B5: 結束日期
-                    config.msg      = rows[5][1]; // B6: 公告訊息
-                    
+                    config.pwd      = rows[0][1]; 
+                    config.range    = rows[1][1]; 
+                    config.queryCol = rows[2][1]; 
+                    config.start    = rows[3][1]; 
+                    config.end      = rows[4][1]; 
+                    config.msg      = rows[5][1]; 
                     checkTimeAndInit();
                 }
             },
             error: function() {
-                document.getElementById("announcement").innerHTML = "<span style='color:red;'>無法讀取「設定」工作表。請確認試算表已「發佈到網路」並選擇該分頁為 CSV 格式。</span>";
+                document.getElementById("announcement").innerHTML = "<span style='color:red;'>無法讀取「設定」工作表。</span>";
             }
         });
     }
 
-    function colToIdx(col) {
-        return col.toUpperCase().charCodeAt(0) - 65;
-    }
+    function colToIdx(col) { return col.toUpperCase().charCodeAt(0) - 65; }
 
-    // 2. 檢查公告時間
     function checkTimeAndInit() {
         const now = new Date();
         const startTime = new Date(config.start);
         const endTime = new Date(config.end);
-
         const timerInfo = document.getElementById("timerInfo");
         const showStart = config.start.replace('T', ' ');
         const showEnd = config.end.replace('T', ' ');
@@ -177,7 +171,6 @@
         timeMsg.innerHTML = `<div class="no-data">${msg}</div>`;
     }
 
-    // 3. 讀取主資料 (工作表1)
     let allData = [];
     let headers = [];
 
@@ -216,6 +209,7 @@
         dataSelect.disabled = false;
     }
 
+    // --- 修改此處邏輯為直式排列 ---
     document.getElementById("dataSelect").addEventListener("change", function() {
         const val = this.value;
         const resArea = document.getElementById("resultArea");
@@ -227,23 +221,30 @@
         const sIdx = colToIdx(range[0]);
         const eIdx = colToIdx(range[1]);
 
-        let html = `<table><thead><tr>`;
-        for (let i = sIdx; i <= eIdx; i++) html += `<th>${headers[i] || ""}</th>`;
-        html += `</tr></thead><tbody>`;
+        let finalHtml = "";
         
         filtered.forEach(row => {
-            html += `<tr>`;
+            let tableHtml = `<div class="result-block"><table><tbody>`;
             for (let i = sIdx; i <= eIdx; i++) {
-                let d = row[i] || "";
-                if (headers[i] && headers[i].includes("姓名")) d = maskName(d);
-                html += `<td>${d}</td>`;
+                let label = headers[i] || "";
+                let content = row[i] || "";
+                
+                // 姓名遮罩
+                if (label.includes("姓名")) content = maskName(content);
+                
+                tableHtml += `
+                    <tr>
+                        <th>${label}</th>
+                        <td>${content}</td>
+                    </tr>`;
             }
-            html += `</tr>`;
+            tableHtml += `</tbody></table></div>`;
+            finalHtml += tableHtml;
         });
-        resArea.innerHTML = html + '</tbody></table>';
+
+        resArea.innerHTML = finalHtml;
     });
 
-    // --- 登入控制 ---
     function openLogin() { 
         document.getElementById('loginOverlay').style.display = 'flex'; 
         document.getElementById('adminPwdInput').value = '';
@@ -275,7 +276,6 @@
         return n.length === 2 ? n[0] + "○" : n[0] + "○" + n.substring(2);
     }
 
-    // 啟動
     fetchSettings();
 </script>
 
