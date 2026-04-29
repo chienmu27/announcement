@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- 強制瀏覽器不暫存網頁內容，確保每次開啟及重新整理都是最新版本 -->
+    <!-- 強制瀏覽器不暫存網頁內容 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -51,19 +51,6 @@
         /* 管理分頁樣式 */
         #adminPanel { display: none; background: #fff3cd; padding: 20px; border: 1px solid #ffeeba; border-radius: 8px; margin-top: 20px; }
         .admin-btn { background: #6c757d; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; float: right; font-size: 12px; }
-        .save-btn { background: #28a745; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; width: 100%; font-size: 16px; }
-        .save-btn:hover { background: #218838; }
-
-        /* 登入遮罩層樣式 */
-        #loginOverlay {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center;
-        }
-        .login-box { background: white; padding: 25px; border-radius: 10px; width: 300px; text-align: center; }
-        .login-box h3 { margin-top: 0; }
-        .login-box button { width: 48%; padding: 10px; cursor: pointer; border-radius: 5px; border: none; margin-top: 5px; }
-        .btn-confirm { background: #007bff; color: white; }
-        .btn-cancel { background: #6c757d; color: white; }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -71,14 +58,14 @@
 
 <body>
 
-<!-- 隱藏的登入遮罩 (遮蔽輸入防止資料留存) -->
-<div id="loginOverlay">
-    <div class="login-box">
+<!-- 登入遮罩層 -->
+<div id="loginOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 25px; border-radius: 10px; width: 300px; text-align: center;">
         <h3>管理員登入</h3>
         <input type="password" id="adminPwdInput" placeholder="請輸入密碼" autocomplete="new-password">
         <div style="display: flex; justify-content: space-between;">
-            <button class="btn-cancel" onclick="closeLogin()">取消</button>
-            <button class="btn-confirm" onclick="verifyAdmin()">驗證登入</button>
+            <button onclick="closeLogin()" style="background:#6c757d; color:white; border:none; padding:10px; border-radius:5px; cursor:pointer; width:45%;">取消</button>
+            <button onclick="verifyAdmin()" style="background:#007bff; color:white; border:none; padding:10px; border-radius:5px; cursor:pointer; width:45%;">登入</button>
         </div>
     </div>
 </div>
@@ -87,15 +74,14 @@
     <button class="admin-btn" onclick="openLogin()">管理登入</button>
     <h1>羽球隊公告查詢系統</h1>
     
-    <!-- 使用者頁面 -->
     <div id="userView">
-        <div id="announcement">正在載入公告內容...</div>
+        <div id="announcement">正在連線至試算表取得設定...</div>
         
-        <div id="mainContent">
+        <div id="mainContent" style="display:none;">
             <div class="controls">
                 <label id="selectLabel" for="dataSelect">請選擇查詢項目：</label>
                 <select id="dataSelect" disabled>
-                    <option value="">檢查公告時間中...</option>
+                    <option value="">載入中...</option>
                 </select>
             </div>
 
@@ -108,107 +94,61 @@
         <div class="timer-info" id="timerInfo"></div>
     </div>
 
-    <!-- 管理頁面 -->
+    <!-- 管理頁面 (僅供檢視同步狀態) -->
     <div id="adminPanel">
-        <h2>系統管理設定</h2>
-        <label>公告起始日期時間：</label>
-        <input type="datetime-local" id="setStart">
-        
-        <label>公告結束日期時間：</label>
-        <input type="datetime-local" id="setEnd">
-        
-        <label>顯示欄位範圍 (例如 A:D)：</label>
-        <input type="text" id="setRange" placeholder="A:D">
-        
-        <label>查詢下拉選單欄位 (例如 A)：</label>
-        <input type="text" id="setQueryCol" placeholder="A">
-
-        <label>修改管理登入密碼：</label>
-        <input type="password" id="setPwd" placeholder="設定新的管理密碼" autocomplete="new-password">
-        
-        <button class="save-btn" onclick="saveSettings()">儲存設定並重新整理</button>
-        <button class="admin-btn" style="float:none; margin-top:10px; background:#dc3545;" onclick="location.reload()">取消/返回</button>
+        <h2>系統管理設定 (已與試算表同步)</h2>
+        <label>目前載入的設定：</label>
+        <div id="adminConfigInfo" style="background:white; padding:15px; border-radius:5px; line-height:2;"></div>
+        <button class="admin-btn" style="float:none; margin-top:20px; width:100%; padding:15px; background:#28a745;" onclick="location.reload()">重新讀取試算表資料</button>
+        <button class="admin-btn" style="float:none; margin-top:10px; width:100%; padding:10px;" onclick="location.reload()">返回查詢頁面</button>
     </div>
 </div>
 
 <script>
-    // --- 預設配置 ---
-    let config = {
-        start: "2024-01-01T00:00",
-        end: "2026-12-31T23:59",
-        range: "A:D",      
-        queryCol: "A",     
-        pwd: "144701",       
-        csvURL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTG5N08Vj2l_tiJM4DxAngrIx3y_xpjx1EeGjJPCExm2eGkq8JDPjf1TUCRXBYUKBUsvz0P8Asg-3C/pub?gid=1326972968&single=true&output=csv"
+    // --- 試算表連結配置 ---
+    const SHEET_CONFIG = {
+        // 設定工作表 (需在試算表內將此分頁「發佈到網路」為 CSV)
+        settingsCSV: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTG5N08Vj2l_tiJM4DxAngrIx3y_xpjx1EeGjJPCExm2eGkq8JDPjf1TUCRXBYUKBUsvz0P8Asg-3C/pub?gid=727667803&single=true&output=csv",
+        
+        // 資料工作表 (工作表1，需發佈為 CSV)
+        dataCSV: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTG5N08Vj2l_tiJM4DxAngrIx3y_xpjx1EeGjJPCExm2eGkq8JDPjf1TUCRXBYUKBUsvz0P8Asg-3C/pub?gid=1326972968&single=true&output=csv"
     };
 
-    // 每次載入時重新讀取，確保不被舊變數汙染
-    function loadConfig() {
-        const saved = localStorage.getItem('badmintonSettings');
-        if (saved) {
-            config = JSON.parse(saved);
-        }
+    let config = {
+        pwd: "", start: "", end: "", range: "", queryCol: "", msg: ""
+    };
+
+    // 1. 初始化：從「設定」工作表抓取參數
+    function fetchSettings() {
+        const url = SHEET_CONFIG.settingsCSV + "&t=" + new Date().getTime();
+        Papa.parse(url, {
+            download: true,
+            complete: function(results) {
+                const rows = results.data;
+                if (rows.length >= 6) {
+                    // 對應 B1 到 B6 (索引為 rows[0][1] 到 rows[5][1])
+                    config.pwd      = rows[0][1]; // B1: 驗證碼
+                    config.range    = rows[1][1]; // B2: 欄位範圍 (如 A:D)
+                    config.queryCol = rows[2][1]; // B3: 下拉選單欄位 (如 A)
+                    config.start    = rows[3][1]; // B4: 開始日期
+                    config.end      = rows[4][1]; // B5: 結束日期
+                    config.msg      = rows[5][1]; // B6: 公告訊息
+                    
+                    checkTimeAndInit();
+                }
+            },
+            error: function() {
+                document.getElementById("announcement").innerHTML = "<span style='color:red;'>無法讀取「設定」工作表。請確認試算表已「發佈到網路」並選擇該分頁為 CSV 格式。</span>";
+            }
+        });
     }
 
     function colToIdx(col) {
         return col.toUpperCase().charCodeAt(0) - 65;
     }
 
-    // --- 登入控制邏輯 ---
-    function openLogin() {
-        document.getElementById('loginOverlay').style.display = 'flex';
-        const pwdField = document.getElementById('adminPwdInput');
-        pwdField.value = ''; // 強制清空舊輸入
-        pwdField.focus();
-    }
-
-    function closeLogin() {
-        document.getElementById('loginOverlay').style.display = 'none';
-        document.getElementById('adminPwdInput').value = ''; 
-    }
-
-    function verifyAdmin() {
-        const inputPwd = document.getElementById('adminPwdInput').value;
-        // 驗證密碼
-        if (inputPwd === config.pwd) { 
-            closeLogin();
-            document.getElementById('userView').style.display = 'none';
-            document.getElementById('adminPanel').style.display = 'block';
-            
-            // 填入目前最新的設定值
-            document.getElementById('setStart').value = config.start;
-            document.getElementById('setEnd').value = config.end;
-            document.getElementById('setRange').value = config.range;
-            document.getElementById('setQueryCol').value = config.queryCol;
-            document.getElementById('setPwd').value = config.pwd;
-        } else {
-            // 登入失敗：顯示特定的錯誤提示訊息
-            alert("驗證碼錯誤，請輸入正確的密碼。");
-            document.getElementById('adminPwdInput').value = '';
-        }
-    }
-
-    document.getElementById('adminPwdInput').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') verifyAdmin();
-    });
-
-    function saveSettings() {
-        config.start = document.getElementById('setStart').value;
-        config.end = document.getElementById('setEnd').value;
-        config.range = document.getElementById('setRange').value.toUpperCase();
-        config.queryCol = document.getElementById('setQueryCol').value.toUpperCase();
-        config.pwd = document.getElementById('setPwd').value;
-        
-        localStorage.setItem('badmintonSettings', JSON.stringify(config));
-        alert("設定已儲存！網頁將重新載入最新內容。");
-        location.reload(); 
-    }
-
-    let allData = [];
-    let headers = [];
-
+    // 2. 檢查公告時間
     function checkTimeAndInit() {
-        loadConfig(); // 確保讀取到最新設定
         const now = new Date();
         const startTime = new Date(config.start);
         const endTime = new Date(config.end);
@@ -223,7 +163,9 @@
         } else if (now > endTime) {
             showTimeMessage(`公告查詢期限已過 (${showEnd})。<br>如有疑問請洽本組。`);
         } else {
-            loadData();
+            document.getElementById("announcement").textContent = config.msg;
+            document.getElementById("mainContent").style.display = "block";
+            loadMainData();
         }
     }
 
@@ -235,24 +177,22 @@
         timeMsg.innerHTML = `<div class="no-data">${msg}</div>`;
     }
 
-    function loadData() {
-        // 使用動態時間戳記防止 CSV 資料被快取
-        const freshURL = config.csvURL + "&t=" + new Date().getTime();
-        
-        Papa.parse(freshURL, {
+    // 3. 讀取主資料 (工作表1)
+    let allData = [];
+    let headers = [];
+
+    function loadMainData() {
+        const url = SHEET_CONFIG.dataCSV + "&t=" + new Date().getTime();
+        Papa.parse(url, {
             download: true,
-            header: false, 
+            header: false,
             skipEmptyLines: true,
             complete: function(results) {
                 if (results.data.length > 0) {
                     headers = results.data[0];
                     allData = results.data.slice(1);
-                    document.getElementById("announcement").textContent = "羽球隊相關訊息公告";
                     renderDropdown();
                 }
-            },
-            error: function() {
-                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>無法讀取遠端資料，請重新整理網頁。</div>";
             }
         });
     }
@@ -277,48 +217,66 @@
     }
 
     document.getElementById("dataSelect").addEventListener("change", function() {
-        const selectedValue = this.value;
-        const resultArea = document.getElementById("resultArea");
-        if (!selectedValue) {
-            resultArea.innerHTML = '<div class="no-data">請先從上方選單選擇</div>';
-            return;
-        }
+        const val = this.value;
+        const resArea = document.getElementById("resultArea");
+        if (!val) { resArea.innerHTML = '<div class="no-data">請先從上方選單選擇</div>'; return; }
 
-        const queryIdx = colToIdx(config.queryCol);
-        const filtered = allData.filter(row => row[queryIdx] === selectedValue);
-        const rangeParts = config.range.split(':');
-        const startIdx = colToIdx(rangeParts[0]);
-        const endIdx = (rangeParts.length > 1) ? colToIdx(rangeParts[1]) : startIdx;
+        const qIdx = colToIdx(config.queryCol);
+        const filtered = allData.filter(row => row[qIdx] === val);
+        const range = config.range.split(':');
+        const sIdx = colToIdx(range[0]);
+        const eIdx = colToIdx(range[1]);
 
-        let tableHtml = `<table><thead><tr>`;
-        for (let i = startIdx; i <= endIdx; i++) {
-            tableHtml += `<th>${headers[i] || ""}</th>`;
-        }
-        tableHtml += `</tr></thead><tbody>`;
+        let html = `<table><thead><tr>`;
+        for (let i = sIdx; i <= eIdx; i++) html += `<th>${headers[i] || ""}</th>`;
+        html += `</tr></thead><tbody>`;
         
         filtered.forEach(row => {
-            tableHtml += `<tr>`;
-            for (let i = startIdx; i <= endIdx; i++) {
-                let cellData = row[i] || "";
-                if (headers[i] && headers[i].includes("姓名")) {
-                    cellData = maskName(cellData);
-                }
-                tableHtml += `<td>${cellData}</td>`;
+            html += `<tr>`;
+            for (let i = sIdx; i <= eIdx; i++) {
+                let d = row[i] || "";
+                if (headers[i] && headers[i].includes("姓名")) d = maskName(d);
+                html += `<td>${d}</td>`;
             }
-            tableHtml += `</tr>`;
+            html += `</tr>`;
         });
-        tableHtml += '</tbody></table>';
-        resultArea.innerHTML = tableHtml;
+        resArea.innerHTML = html + '</tbody></table>';
     });
 
-    function maskName(name) {
-        if (!name || name.length < 2) return name;
-        if (name.length === 2) return name[0] + "○";
-        return name[0] + "○" + name.substring(2);
+    // --- 登入控制 ---
+    function openLogin() { 
+        document.getElementById('loginOverlay').style.display = 'flex'; 
+        document.getElementById('adminPwdInput').value = '';
+    }
+    function closeLogin() { document.getElementById('loginOverlay').style.display = 'none'; }
+    
+    function verifyAdmin() {
+        const input = document.getElementById('adminPwdInput').value;
+        if (input === config.pwd) {
+            closeLogin();
+            document.getElementById('userView').style.display = 'none';
+            document.getElementById('adminPanel').style.display = 'block';
+            document.getElementById('adminConfigInfo').innerHTML = `
+                <b>驗證碼：</b> ******<br>
+                <b>顯示範圍：</b> ${config.range}<br>
+                <b>選單欄位：</b> ${config.queryCol}<br>
+                <b>開始日期：</b> ${config.start}<br>
+                <b>結束日期：</b> ${config.end}<br>
+                <b>公告訊息：</b> ${config.msg}
+            `;
+        } else {
+            alert("驗證碼錯誤，請輸入正確的密碼。");
+            document.getElementById('adminPwdInput').value = '';
+        }
     }
 
-    // 啟動檢測
-    checkTimeAndInit();
+    function maskName(n) {
+        if (!n || n.length < 2) return n;
+        return n.length === 2 ? n[0] + "○" : n[0] + "○" + n.substring(2);
+    }
+
+    // 啟動
+    fetchSettings();
 </script>
 
 </body>
