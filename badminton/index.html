@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- 強制瀏覽器不暫存網頁內容，確保每次開啟都是最新版本 -->
+    <!-- 強制瀏覽器不暫存網頁內容，確保每次開啟及重新整理都是最新版本 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -71,7 +71,7 @@
 
 <body>
 
-<!-- 隱藏的登入遮罩 (密碼輸入不留存舊資料) -->
+<!-- 隱藏的登入遮罩 (遮蔽輸入防止資料留存) -->
 <div id="loginOverlay">
     <div class="login-box">
         <h3>管理員登入</h3>
@@ -124,7 +124,6 @@
         <input type="text" id="setQueryCol" placeholder="A">
 
         <label>修改管理登入密碼：</label>
-        <!-- 使用 new-password 防止瀏覽器自動填入舊密碼 -->
         <input type="password" id="setPwd" placeholder="設定新的管理密碼" autocomplete="new-password">
         
         <button class="save-btn" onclick="saveSettings()">儲存設定並重新整理</button>
@@ -165,11 +164,12 @@
 
     function closeLogin() {
         document.getElementById('loginOverlay').style.display = 'none';
-        document.getElementById('adminPwdInput').value = ''; // 關閉時也清空
+        document.getElementById('adminPwdInput').value = ''; 
     }
 
     function verifyAdmin() {
         const inputPwd = document.getElementById('adminPwdInput').value;
+        // 驗證密碼
         if (inputPwd === config.pwd) { 
             closeLogin();
             document.getElementById('userView').style.display = 'none';
@@ -182,6 +182,7 @@
             document.getElementById('setQueryCol').value = config.queryCol;
             document.getElementById('setPwd').value = config.pwd;
         } else {
+            // 登入失敗：顯示特定的錯誤提示訊息
             alert("驗證碼錯誤，請輸入正確的密碼。");
             document.getElementById('adminPwdInput').value = '';
         }
@@ -199,15 +200,15 @@
         config.pwd = document.getElementById('setPwd').value;
         
         localStorage.setItem('badmintonSettings', JSON.stringify(config));
-        alert("設定已儲存！網頁將重新載入最新設定。");
-        location.reload(); // 儲存後強制刷新
+        alert("設定已儲存！網頁將重新載入最新內容。");
+        location.reload(); 
     }
 
     let allData = [];
     let headers = [];
 
     function checkTimeAndInit() {
-        loadConfig(); // 確保讀取到最新 LocalStorage 資料
+        loadConfig(); // 確保讀取到最新設定
         const now = new Date();
         const startTime = new Date(config.start);
         const endTime = new Date(config.end);
@@ -235,7 +236,7 @@
     }
 
     function loadData() {
-        // 使用時間戳記強迫取得 Google 試算表最新資料
+        // 使用動態時間戳記防止 CSV 資料被快取
         const freshURL = config.csvURL + "&t=" + new Date().getTime();
         
         Papa.parse(freshURL, {
@@ -251,7 +252,7 @@
                 }
             },
             error: function() {
-                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>無法讀取遠端資料，請檢查網路連接。</div>";
+                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>無法讀取遠端資料，請重新整理網頁。</div>";
             }
         });
     }
@@ -262,7 +263,6 @@
         const labelName = headers[queryIdx] || "項目";
         document.getElementById("selectLabel").textContent = `請選擇${labelName}：`;
 
-        // 提取不重複項目
         const options = [...new Set(allData.map(row => row[queryIdx]))].filter(c => c).sort();
         dataSelect.innerHTML = `<option value="">-- 請選擇 ${labelName} --</option>`;
         
@@ -270,7 +270,6 @@
         options.forEach(opt => {
             const option = document.createElement("option");
             option.value = opt;
-            // 同步套用姓名遮罩
             option.textContent = isNameCol ? maskName(opt) : opt;
             dataSelect.appendChild(option);
         });
@@ -318,7 +317,7 @@
         return name[0] + "○" + name.substring(2);
     }
 
-    // 初始化啟動
+    // 啟動檢測
     checkTimeAndInit();
 </script>
 
