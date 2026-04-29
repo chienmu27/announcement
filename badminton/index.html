@@ -48,6 +48,17 @@
         .admin-btn { background: #6c757d; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; float: right; font-size: 12px; }
         .save-btn { background: #28a745; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; width: 100%; font-size: 16px; }
         .save-btn:hover { background: #218838; }
+
+        /* 登入遮罩層樣式 */
+        #loginOverlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center;
+        }
+        .login-box { background: white; padding: 25px; border-radius: 10px; width: 300px; text-align: center; }
+        .login-box h3 { margin-top: 0; }
+        .login-box button { width: 48%; padding: 10px; cursor: pointer; border-radius: 5px; border: none; margin-top: 5px; }
+        .btn-confirm { background: #007bff; color: white; }
+        .btn-cancel { background: #6c757d; color: white; }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -55,8 +66,20 @@
 
 <body>
 
+<!-- 隱藏的登入遮罩 -->
+<div id="loginOverlay">
+    <div class="login-box">
+        <h3>管理員登入</h3>
+        <input type="password" id="adminPwdInput" placeholder="請輸入密碼">
+        <div style="display: flex; justify-content: space-between;">
+            <button class="btn-cancel" onclick="closeLogin()">取消</button>
+            <button class="btn-confirm" onclick="verifyAdmin()">登入代碼驗證</button>
+        </div>
+    </div>
+</div>
+
 <div class="container">
-    <button class="admin-btn" onclick="loginAdmin()">管理登入</button>
+    <button class="admin-btn" onclick="openLogin()">管理登入</button>
     <h1>羽球隊公告查詢系統</h1>
     
     <!-- 使用者頁面 -->
@@ -95,8 +118,8 @@
         <label>查詢下拉選單欄位 (例如 A)：</label>
         <input type="text" id="setQueryCol" placeholder="A">
 
-        <label>管理登入密碼：</label>
-        <input type="text" id="setPwd" placeholder="目前的預設密碼">
+        <label>修改管理登入密碼：</label>
+        <input type="password" id="setPwd" placeholder="在此輸入新密碼">
         
         <button class="save-btn" onclick="saveSettings()">儲存設定並重新整理</button>
         <button class="admin-btn" style="float:none; margin-top:10px; background:#dc3545;" onclick="location.reload()">取消/返回</button>
@@ -110,11 +133,10 @@
         end: "2026-12-31T23:59",
         range: "A:D",      
         queryCol: "A",     
-        pwd: "144701",       // 預設密碼
+        pwd: "144701",       
         csvURL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTG5N08Vj2l_tiJM4DxAngrIx3y_xpjx1EeGjJPCExm2eGkq8JDPjf1TUCRXBYUKBUsvz0P8Asg-3C/pub?gid=1326972968&single=true&output=csv"
     };
 
-    // 從 LocalStorage 載入設定
     function loadConfig() {
         const saved = localStorage.getItem('badmintonSettings');
         if (saved) {
@@ -122,18 +144,28 @@
         }
     }
 
-    // 字母轉索引 (A -> 0, B -> 1)
     function colToIdx(col) {
         return col.toUpperCase().charCodeAt(0) - 65;
     }
 
-    function loginAdmin() {
-        const password = prompt("請輸入管理員驗證碼：");
-        if (password === config.pwd) { 
+    // --- 登入控制邏輯 ---
+    function openLogin() {
+        document.getElementById('loginOverlay').style.display = 'flex';
+        document.getElementById('adminPwdInput').value = '';
+        document.getElementById('adminPwdInput').focus();
+    }
+
+    function closeLogin() {
+        document.getElementById('loginOverlay').style.display = 'none';
+    }
+
+    function verifyAdmin() {
+        const inputPwd = document.getElementById('adminPwdInput').value;
+        if (inputPwd === config.pwd) { 
+            closeLogin();
             document.getElementById('userView').style.display = 'none';
             document.getElementById('adminPanel').style.display = 'block';
             
-            // 填入目前設定值
             document.getElementById('setStart').value = config.start;
             document.getElementById('setEnd').value = config.end;
             document.getElementById('setRange').value = config.range;
@@ -143,6 +175,11 @@
             alert("驗證碼錯誤");
         }
     }
+
+    // 支援按下 Enter 鍵登入
+    document.getElementById('adminPwdInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') verifyAdmin();
+    });
 
     function saveSettings() {
         config.start = document.getElementById('setStart').value;
@@ -166,7 +203,6 @@
         const endTime = new Date(config.end);
 
         const timerInfo = document.getElementById("timerInfo");
-        // 格式化顯示時間
         const showStart = config.start.replace('T', ' ');
         const showEnd = config.end.replace('T', ' ');
         timerInfo.innerHTML = `公告查詢期間：${showStart} ~ ${showEnd}`;
@@ -189,7 +225,10 @@
     }
 
     function loadData() {
-        Papa.parse(config.csvURL, {
+        // 新增時間戳記參數以防止瀏覽器快取舊資料
+        const freshURL = config.csvURL + "&t=" + new Date().getTime();
+        
+        Papa.parse(freshURL, {
             download: true,
             header: false, 
             skipEmptyLines: true,
@@ -197,7 +236,6 @@
                 if (results.data.length > 0) {
                     headers = results.data[0];
                     allData = results.data.slice(1);
-                    
                     document.getElementById("announcement").textContent = "羽球隊相關訊息公告";
                     renderDropdown();
                 }
@@ -211,21 +249,16 @@
     function renderDropdown() {
         const dataSelect = document.getElementById("dataSelect");
         const queryIdx = colToIdx(config.queryCol);
-        
         const labelName = headers[queryIdx] || "項目";
         document.getElementById("selectLabel").textContent = `請選擇${labelName}：`;
 
         const options = [...new Set(allData.map(row => row[queryIdx]))].filter(c => c).sort();
-        
         dataSelect.innerHTML = `<option value="">-- 請選擇 ${labelName} --</option>`;
         
-        // 檢查查詢欄位標題是否包含「姓名」
         const isNameCol = labelName.includes("姓名");
-
         options.forEach(opt => {
             const option = document.createElement("option");
             option.value = opt;
-            // 如果是姓名，則顯示遮罩過的文字，否則顯示原文字
             option.textContent = isNameCol ? maskName(opt) : opt;
             dataSelect.appendChild(option);
         });
@@ -235,7 +268,6 @@
     document.getElementById("dataSelect").addEventListener("change", function() {
         const selectedValue = this.value;
         const resultArea = document.getElementById("resultArea");
-        
         if (!selectedValue) {
             resultArea.innerHTML = '<div class="no-data">請先從上方選單選擇</div>';
             return;
@@ -243,7 +275,6 @@
 
         const queryIdx = colToIdx(config.queryCol);
         const filtered = allData.filter(row => row[queryIdx] === selectedValue);
-        
         const rangeParts = config.range.split(':');
         const startIdx = colToIdx(rangeParts[0]);
         const endIdx = (rangeParts.length > 1) ? colToIdx(rangeParts[1]) : startIdx;
@@ -258,17 +289,13 @@
             tableHtml += `<tr>`;
             for (let i = startIdx; i <= endIdx; i++) {
                 let cellData = row[i] || "";
-                
-                // 姓名遮罩 (如果表格標題包含姓名)
                 if (headers[i] && headers[i].includes("姓名")) {
                     cellData = maskName(cellData);
                 }
-                
                 tableHtml += `<td>${cellData}</td>`;
             }
             tableHtml += `</tr>`;
         });
-        
         tableHtml += '</tbody></table>';
         resultArea.innerHTML = tableHtml;
     });
@@ -279,7 +306,6 @@
         return name[0] + "○" + name.substring(2);
     }
 
-    // 初始化啟動
     checkTimeAndInit();
 </script>
 
