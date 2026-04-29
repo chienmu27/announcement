@@ -69,8 +69,8 @@
 
 <script>
     const config = {
-        start: { y: 2026, m: 2, d: 24, hr: 18, min: 0 }, 
-        end:   { y: 2026, m: 3, d: 6, hr: 17, min: 0 },
+        start: { y: 2026, m: 4, d: 24, hr: 18, min: 0 }, 
+        end:   { y: 2026, m: 5, d: 16, hr: 17, min: 0 },
         csvURL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSIzS-_hGz-62j8Ky4aUuJSpeaPTjSHOx85BGfjowRx4-wQQS6gk4ulyNI8GjD1SPhrQLeQpuVtOR9o/pub?gid=0&single=true&output=csv"
     };
 
@@ -107,7 +107,7 @@
             mainContent.style.display = "none";
             announcementDiv.style.display = "none";
             timeMessage.style.display = "block";
-            timeMessage.innerHTML = `<div class="no-data">公告查詢期限已過 (${displayEnd})。<br>如有疑問請洽本校教務處。</div>`;
+            timeMessage.innerHTML = `<div class="no-data">公告查詢期限已過 (${displayEnd})。<br>如有疑問請洽本校學務處。</div>`;
         } else {
             loadData();
         }
