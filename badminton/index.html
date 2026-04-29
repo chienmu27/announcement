@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 強制瀏覽器不暫存網頁內容，確保每次開啟都是最新版本 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
     <title>羽球隊公告查詢系統</title>
 
     <style>
@@ -66,14 +71,14 @@
 
 <body>
 
-<!-- 隱藏的登入遮罩 -->
+<!-- 隱藏的登入遮罩 (密碼輸入不留存舊資料) -->
 <div id="loginOverlay">
     <div class="login-box">
         <h3>管理員登入</h3>
-        <input type="password" id="adminPwdInput" placeholder="請輸入密碼">
+        <input type="password" id="adminPwdInput" placeholder="請輸入密碼" autocomplete="new-password">
         <div style="display: flex; justify-content: space-between;">
             <button class="btn-cancel" onclick="closeLogin()">取消</button>
-            <button class="btn-confirm" onclick="verifyAdmin()">登入代碼驗證</button>
+            <button class="btn-confirm" onclick="verifyAdmin()">驗證登入</button>
         </div>
     </div>
 </div>
@@ -119,7 +124,8 @@
         <input type="text" id="setQueryCol" placeholder="A">
 
         <label>修改管理登入密碼：</label>
-        <input type="password" id="setPwd" placeholder="在此輸入新密碼">
+        <!-- 使用 new-password 防止瀏覽器自動填入舊密碼 -->
+        <input type="password" id="setPwd" placeholder="設定新的管理密碼" autocomplete="new-password">
         
         <button class="save-btn" onclick="saveSettings()">儲存設定並重新整理</button>
         <button class="admin-btn" style="float:none; margin-top:10px; background:#dc3545;" onclick="location.reload()">取消/返回</button>
@@ -137,6 +143,7 @@
         csvURL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTG5N08Vj2l_tiJM4DxAngrIx3y_xpjx1EeGjJPCExm2eGkq8JDPjf1TUCRXBYUKBUsvz0P8Asg-3C/pub?gid=1326972968&single=true&output=csv"
     };
 
+    // 每次載入時重新讀取，確保不被舊變數汙染
     function loadConfig() {
         const saved = localStorage.getItem('badmintonSettings');
         if (saved) {
@@ -151,12 +158,14 @@
     // --- 登入控制邏輯 ---
     function openLogin() {
         document.getElementById('loginOverlay').style.display = 'flex';
-        document.getElementById('adminPwdInput').value = '';
-        document.getElementById('adminPwdInput').focus();
+        const pwdField = document.getElementById('adminPwdInput');
+        pwdField.value = ''; // 強制清空舊輸入
+        pwdField.focus();
     }
 
     function closeLogin() {
         document.getElementById('loginOverlay').style.display = 'none';
+        document.getElementById('adminPwdInput').value = ''; // 關閉時也清空
     }
 
     function verifyAdmin() {
@@ -166,17 +175,18 @@
             document.getElementById('userView').style.display = 'none';
             document.getElementById('adminPanel').style.display = 'block';
             
+            // 填入目前最新的設定值
             document.getElementById('setStart').value = config.start;
             document.getElementById('setEnd').value = config.end;
             document.getElementById('setRange').value = config.range;
             document.getElementById('setQueryCol').value = config.queryCol;
             document.getElementById('setPwd').value = config.pwd;
         } else {
-            alert("驗證碼錯誤");
+            alert("驗證碼錯誤，請輸入正確的密碼。");
+            document.getElementById('adminPwdInput').value = '';
         }
     }
 
-    // 支援按下 Enter 鍵登入
     document.getElementById('adminPwdInput').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') verifyAdmin();
     });
@@ -189,15 +199,15 @@
         config.pwd = document.getElementById('setPwd').value;
         
         localStorage.setItem('badmintonSettings', JSON.stringify(config));
-        alert("設定已儲存！");
-        location.reload();
+        alert("設定已儲存！網頁將重新載入最新設定。");
+        location.reload(); // 儲存後強制刷新
     }
 
     let allData = [];
     let headers = [];
 
     function checkTimeAndInit() {
-        loadConfig();
+        loadConfig(); // 確保讀取到最新 LocalStorage 資料
         const now = new Date();
         const startTime = new Date(config.start);
         const endTime = new Date(config.end);
@@ -225,7 +235,7 @@
     }
 
     function loadData() {
-        // 新增時間戳記參數以防止瀏覽器快取舊資料
+        // 使用時間戳記強迫取得 Google 試算表最新資料
         const freshURL = config.csvURL + "&t=" + new Date().getTime();
         
         Papa.parse(freshURL, {
@@ -241,7 +251,7 @@
                 }
             },
             error: function() {
-                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>資料讀取失敗。</div>";
+                document.getElementById("resultArea").innerHTML = "<div class='no-data' style='color:red;'>無法讀取遠端資料，請檢查網路連接。</div>";
             }
         });
     }
@@ -252,6 +262,7 @@
         const labelName = headers[queryIdx] || "項目";
         document.getElementById("selectLabel").textContent = `請選擇${labelName}：`;
 
+        // 提取不重複項目
         const options = [...new Set(allData.map(row => row[queryIdx]))].filter(c => c).sort();
         dataSelect.innerHTML = `<option value="">-- 請選擇 ${labelName} --</option>`;
         
@@ -259,6 +270,7 @@
         options.forEach(opt => {
             const option = document.createElement("option");
             option.value = opt;
+            // 同步套用姓名遮罩
             option.textContent = isNameCol ? maskName(opt) : opt;
             dataSelect.appendChild(option);
         });
@@ -306,6 +318,7 @@
         return name[0] + "○" + name.substring(2);
     }
 
+    // 初始化啟動
     checkTimeAndInit();
 </script>
 
