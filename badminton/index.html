@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>羽球隊公告系統</title>
+    <title>羽球隊公告查詢系統</title>
 
     <style>
         body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
@@ -30,7 +30,7 @@
 
         .controls { margin-bottom: 20px; background: #e9ecef; padding: 20px; border-radius: 8px; }
         label { display: block; margin-bottom: 8px; font-weight: bold; }
-        select, input[type="text"], input[type="datetime-local"] { 
+        select, input[type="text"], input[type="datetime-local"], input[type="password"] { 
             width: 100%; padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #ced4da; box-sizing: border-box; margin-bottom: 15px;
         }
         
@@ -94,6 +94,9 @@
         
         <label>查詢下拉選單欄位 (例如 A)：</label>
         <input type="text" id="setQueryCol" placeholder="A">
+
+        <label>管理登入密碼：</label>
+        <input type="text" id="setPwd" placeholder="目前的預設密碼">
         
         <button class="save-btn" onclick="saveSettings()">儲存設定並重新整理</button>
         <button class="admin-btn" style="float:none; margin-top:10px; background:#dc3545;" onclick="location.reload()">取消/返回</button>
@@ -105,8 +108,9 @@
     let config = {
         start: "2024-01-01T00:00",
         end: "2026-12-31T23:59",
-        range: "A:D",      // 顯示 A 到 D 欄
-        queryCol: "A",     // 用 A 欄作為下拉選單
+        range: "A:D",      
+        queryCol: "A",     
+        pwd: "1234",       // 預設密碼
         csvURL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTTG5N08Vj2l_tiJM4DxAngrIx3y_xpjx1EeGjJPCExm2eGkq8JDPjf1TUCRXBYUKBUsvz0P8Asg-3C/pub?gid=1326972968&single=true&output=csv"
     };
 
@@ -125,15 +129,16 @@
 
     function loginAdmin() {
         const password = prompt("請輸入管理員驗證碼：");
-        if (password === "1234") { // 預設驗證碼
+        if (password === config.pwd) { 
             document.getElementById('userView').style.display = 'none';
             document.getElementById('adminPanel').style.display = 'block';
             
-            // 填入目前值
+            // 填入目前設定值
             document.getElementById('setStart').value = config.start;
             document.getElementById('setEnd').value = config.end;
             document.getElementById('setRange').value = config.range;
             document.getElementById('setQueryCol').value = config.queryCol;
+            document.getElementById('setPwd').value = config.pwd;
         } else {
             alert("驗證碼錯誤");
         }
@@ -144,6 +149,7 @@
         config.end = document.getElementById('setEnd').value;
         config.range = document.getElementById('setRange').value.toUpperCase();
         config.queryCol = document.getElementById('setQueryCol').value.toUpperCase();
+        config.pwd = document.getElementById('setPwd').value;
         
         localStorage.setItem('badmintonSettings', JSON.stringify(config));
         alert("設定已儲存！");
@@ -160,12 +166,15 @@
         const endTime = new Date(config.end);
 
         const timerInfo = document.getElementById("timerInfo");
-        timerInfo.innerHTML = `公告查詢期間：${config.start.replace('T',' ')} ~ ${config.end.replace('T',' ')}`;
+        // 格式化顯示時間
+        const showStart = config.start.replace('T', ' ');
+        const showEnd = config.end.replace('T', ' ');
+        timerInfo.innerHTML = `公告查詢期間：${showStart} ~ ${showEnd}`;
 
         if (now < startTime) {
-            showTimeMessage(`目前尚未開放查詢。<br>公告開始時間：${config.start.replace('T',' ')}`);
+            showTimeMessage(`目前尚未開放查詢。<br>公告開始時間：${showStart}`);
         } else if (now > endTime) {
-            showTimeMessage(`公告查詢期限已過 (${config.end.replace('T',' ')})。<br>如有疑問請洽本組。`);
+            showTimeMessage(`公告查詢期限已過 (${showEnd})。<br>如有疑問請洽本組。`);
         } else {
             loadData();
         }
@@ -182,16 +191,14 @@
     function loadData() {
         Papa.parse(config.csvURL, {
             download: true,
-            header: false, // 關閉自動 header 以便手動根據 A,B,C 處理
+            header: false, 
             skipEmptyLines: true,
             complete: function(results) {
                 if (results.data.length > 0) {
                     headers = results.data[0];
                     allData = results.data.slice(1);
                     
-                    // 公告說明固定抓最後一欄或特定欄位，這裡沿用邏輯
                     document.getElementById("announcement").textContent = "羽球隊相關訊息公告";
-                    
                     renderDropdown();
                 }
             },
@@ -205,18 +212,21 @@
         const dataSelect = document.getElementById("dataSelect");
         const queryIdx = colToIdx(config.queryCol);
         
-        // 取得下拉選單顯示名稱 (設定的查詢欄位標題)
         const labelName = headers[queryIdx] || "項目";
         document.getElementById("selectLabel").textContent = `請選擇${labelName}：`;
 
-        // 提取不重複的選項
         const options = [...new Set(allData.map(row => row[queryIdx]))].filter(c => c).sort();
         
         dataSelect.innerHTML = `<option value="">-- 請選擇 ${labelName} --</option>`;
+        
+        // 檢查查詢欄位標題是否包含「姓名」
+        const isNameCol = labelName.includes("姓名");
+
         options.forEach(opt => {
             const option = document.createElement("option");
             option.value = opt;
-            option.textContent = opt;
+            // 如果是姓名，則顯示遮罩過的文字，否則顯示原文字
+            option.textContent = isNameCol ? maskName(opt) : opt;
             dataSelect.appendChild(option);
         });
         dataSelect.disabled = false;
@@ -234,12 +244,10 @@
         const queryIdx = colToIdx(config.queryCol);
         const filtered = allData.filter(row => row[queryIdx] === selectedValue);
         
-        // 解析顯示範圍 A:D
         const rangeParts = config.range.split(':');
         const startIdx = colToIdx(rangeParts[0]);
-        const endIdx = colToIdx(rangeParts[1]);
+        const endIdx = (rangeParts.length > 1) ? colToIdx(rangeParts[1]) : startIdx;
 
-        // 生成表格
         let tableHtml = `<table><thead><tr>`;
         for (let i = startIdx; i <= endIdx; i++) {
             tableHtml += `<th>${headers[i] || ""}</th>`;
@@ -251,7 +259,7 @@
             for (let i = startIdx; i <= endIdx; i++) {
                 let cellData = row[i] || "";
                 
-                // 姓名遮罩 (如果標題包含姓名)
+                // 姓名遮罩 (如果表格標題包含姓名)
                 if (headers[i] && headers[i].includes("姓名")) {
                     cellData = maskName(cellData);
                 }
