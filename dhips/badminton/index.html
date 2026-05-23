@@ -3,24 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 強制瀏覽器不暫存 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
     <title>羽球隊公告查詢系統</title>
 
     <style>
         body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-        .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); position: relative; }
         h1 { text-align: center; color: #2c3e50; margin-bottom: 25px; }
         
-        #announcement { 
-            color: #0056b3; font-weight: bold; font-size: 1.1em; margin-bottom: 20px; 
-            white-space: pre-wrap; line-height: 1.6; text-align: center;
-            background: #eef6ff; padding: 15px; border-radius: 8px;
+        /* 重新整理按鈕樣式 */
+        .refresh-btn { 
+            position: absolute; top: 30px; right: 30px;
+            background: #28a745; color: white; border: none; padding: 8px 15px; 
+            border-radius: 5px; cursor: pointer; font-size: 14px; transition: 0.3s;
         }
+        .refresh-btn:hover { background: #218838; }
 
         /* 分頁按鈕樣式 */
         .tab-container { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
         .tab-btn { 
             padding: 10px 20px; border: none; background: #e9ecef; cursor: pointer; 
-            border-radius: 5px 5px 0 0; font-weight: bold; transition: 0.3s;
+            border-radius: 5px 5px 0 0; font-weight: bold; transition: 0.3s; font-size: 16px;
         }
         .tab-btn.active { background: #2c3e50; color: white; }
         .tab-btn:hover { background: #dee2e6; }
@@ -28,81 +35,88 @@
 
         .controls { margin-bottom: 20px; background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #eee; }
         label { display: block; margin-bottom: 8px; font-weight: bold; }
-        select { width: 100%; padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #ced4da; }
+        select { width: 100%; padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #ced4da; cursor: pointer; }
         
         /* 直式表格樣式 */
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .table-responsive { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; border: 1px solid #dee2e6; }
         th, td { border: 1px solid #dee2e6; padding: 12px 15px; text-align: left; }
-        th { background: #f1f3f5; color: #495057; width: 35%; }
+        th { background: #2c3e50; color: white; width: 35%; white-space: nowrap; }
         td { background: white; color: #333; font-weight: 500; }
         
-        .result-block { margin-bottom: 30px; animation: fadeIn 0.5s; }
+        .result-block { margin-bottom: 30px; animation: fadeIn 0.5s; border-bottom: 3px double #2c3e50; padding-bottom: 10px; }
+        .result-block:last-child { border-bottom: none; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         .no-data { text-align: center; padding: 40px; color: #6c757d; font-size: 18px; }
-        .footer-info { text-align: center; font-size: 0.9em; color: #888; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px; }
+        .status-msg { text-align: center; color: #0056b3; font-weight: bold; margin-bottom: 20px; }
 
-        /* 隱藏區塊 */
-        #mainContent { display: none; }
+        @media (max-width: 600px) {
+            .refresh-btn { position: static; display: block; width: 100%; margin-bottom: 15px; text-align: center; }
+            th { width: 40%; }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <button class="refresh-btn" onclick="fetchData()">🔄 重新整理資料</button>
     <h1>羽球隊查詢系統</h1>
     
-    <div id="userView">
-        <div id="announcement">系統連線中，請稍候...</div>
-        
-        <div id="mainContent">
-            <!-- 分頁按鈕區域 -->
-            <div id="tabBar" class="tab-container"></div>
+    <div id="statusArea" class="status-msg">正在連線試算表...</div>
+    
+    <div id="mainContent" style="display:none;">
+        <!-- 分頁按鈕區域 -->
+        <div id="tabBar" class="tab-container"></div>
 
-            <div class="controls">
-                <label id="selectLabel">請選擇學生姓名</label>
-                <select id="dataSelect">
-                    <option value="">-- 請載入資料 --</option>
-                </select>
-            </div>
-
-            <div id="resultArea">
-                <div class="no-data">請從上方選單選擇學生</div>
-            </div>
+        <div class="controls">
+            <label id="selectLabel" for="dataSelect">請選擇查詢項目：</label>
+            <select id="dataSelect">
+                <option value="">-- 請選擇學生姓名 --</option>
+            </select>
         </div>
 
-        <div class="footer-info">資料更新時間：隨試算表即時同步</div>
+        <div id="resultArea" class="table-responsive">
+            <div class="no-data">請先選擇分頁並從選單選擇學生</div>
+        </div>
     </div>
 </div>
 
 <script>
-    // ⚠️ 請填入您部署後的 GAS 網址
+    // ⚠️ 請填入您部署後的 Google Apps Script 網頁應用程式網址
     const API_URL = "https://script.google.com/macros/s/AKfycbwONQR7Ys4cp799bAD0W7UjLkfIv4iIBhVuwvSMKiSJiYslpLds5oTGQ3ISm50dhDw/exec";
 
     let fullData = {};
     let currentSheet = "";
 
-    // 初始化程式
-    async function init() {
+    // 取得資料
+    async function fetchData() {
+        const statusArea = document.getElementById("statusArea");
+        const mainContent = document.getElementById("mainContent");
+        
+        statusArea.style.display = "block";
+        statusArea.textContent = "資料更新中，請稍候...";
+        
         try {
-            const response = await fetch(API_URL);
+            // 加入時間戳記避免快取
+            const response = await fetch(`${API_URL}?t=${new Date().getTime()}`);
             const json = await response.json();
             fullData = json.data;
 
-            // 檢查是否有資料
-            if (Object.keys(fullData).length === 0) {
-                document.getElementById("announcement").innerHTML = "<span style='color:red;'>試算表內無有效的工作表資料。</span>";
-                return;
+            if (Object.keys(fullData).length > 0) {
+                statusArea.style.display = "none";
+                mainContent.style.display = "block";
+                renderTabs();
+            } else {
+                statusArea.textContent = "試算表中沒有可用的資料。";
             }
-
-            document.getElementById("announcement").textContent = "歡迎使用羽球隊查詢系統，請先選擇分類分頁。";
-            document.getElementById("mainContent").style.display = "block";
-            renderTabs();
         } catch (e) {
-            document.getElementById("announcement").innerHTML = "<span style='color:red;'>無法讀取資料，請確認 API 網址是否正確且已設定為「所有人」皆可存取。</span>";
+            statusArea.innerHTML = "<span style='color:red;'>無法連線至試算表，請確認 API 網址是否正確。</span>";
+            console.error(e);
         }
     }
 
-    // 1. 自動產生分頁鈕
+    // 1. 自動產生分頁按鈕 (所有工作表)
     function renderTabs() {
         const tabBar = document.getElementById("tabBar");
         tabBar.innerHTML = "";
@@ -115,95 +129,107 @@
             btn.onclick = () => switchTab(name, btn);
             tabBar.appendChild(btn);
             
-            // 預設開啟第一個分頁
-            if (index === 0) switchTab(name, btn);
+            // 初始載入時，預設選取第一個分頁
+            if (currentSheet === "" && index === 0) {
+                switchTab(name, btn);
+            } else if (currentSheet === name) {
+                // 如果是按「重新整理」，保留在當前分頁
+                switchTab(name, btn);
+            }
         });
     }
 
     // 切換分頁
     function switchTab(sheetName, btn) {
         currentSheet = sheetName;
-        // 更新按鈕狀態
+        
+        // 切換按鈕樣式
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        if (btn) btn.classList.add('active');
+        
+        // 更新標籤
+        document.getElementById("selectLabel").textContent = `請選擇學生姓名 (${sheetName})：`;
         
         // 更新下拉選單
-        document.getElementById("selectLabel").textContent = `請選擇學生姓名 (${sheetName})：`;
         renderDropdown(sheetName);
         
         // 清空結果區
         document.getElementById("resultArea").innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
     }
 
-    // 2. 以該工作表 A 欄作為下拉選單
+    // 2. 以每個工作表 A 欄為下拉選單內容 (學生姓名)
     function renderDropdown(sheetName) {
         const dataSelect = document.getElementById("dataSelect");
         const rows = fullData[sheetName];
-        
         if (!rows || rows.length < 2) {
-            dataSelect.innerHTML = `<option value="">該工作表無資料</option>`;
+            dataSelect.innerHTML = '<option value="">無資料</option>';
             return;
         }
 
-        // 取得 A 欄 (index 0) 的資料，排除第一列標題，並過濾空白值與重複值
+        // 取得 A 欄 (Index 0)，排除標題 [0] 並去除重複
         const names = [...new Set(rows.slice(1).map(r => r[0]))].filter(n => n).sort();
 
         dataSelect.innerHTML = `<option value="">-- 請選擇學生姓名 --</option>`;
         names.forEach(name => {
             const opt = document.createElement("option");
             opt.value = name;
-            opt.textContent = maskName(name); // 顯示遮罩
+            opt.textContent = maskName(name); // 下拉選單顯示遮罩姓名
             dataSelect.appendChild(opt);
         });
     }
 
-    // 3. 查詢與顯示非空白欄位
+    // 3. 查詢內容顯示該學生所有非空白欄位 (直式表格)
     document.getElementById("dataSelect").addEventListener("change", function() {
-        const name = this.value;
+        const selectedName = this.value;
         const resArea = document.getElementById("resultArea");
         
-        if (!name) { 
-            resArea.innerHTML = '<div class="no-data">請從上方選單選擇學生</div>'; 
-            return; 
+        if (!selectedName) {
+            resArea.innerHTML = '<div class="no-data">請先選擇分頁並從選單選擇學生</div>';
+            return;
         }
 
         const rows = fullData[currentSheet];
-        const headers = rows[0];
-        const studentRows = rows.filter(r => r[0] === name);
+        const headers = rows[0]; // 第一列為標題
+        const studentRows = rows.filter(r => r[0] === selectedName);
 
         let html = "";
         studentRows.forEach(row => {
             html += `<div class="result-block"><table><tbody>`;
-            row.forEach((cell, idx) => {
-                const value = cell !== null && cell !== undefined ? cell.toString().trim() : "";
-                const label = headers[idx] ? headers[idx].toString().trim() : "";
+            headers.forEach((label, idx) => {
+                const value = row[idx] !== undefined ? row[idx].toString().trim() : "";
+                const headerLabel = label ? label.toString().trim() : "";
                 
-                // 只顯示非空白的欄位與標題
-                if (value !== "" && label !== "") {
+                // 只顯示非空白欄位資料
+                if (value !== "" && headerLabel !== "") {
                     let displayValue = value;
-                    // 如果標題含「姓名」字樣則遮罩
-                    if (label.includes("姓名")) displayValue = maskName(value);
+                    // 如果標題包含「姓名」，則執行遮罩
+                    if (headerLabel.includes("姓名")) {
+                        displayValue = maskName(value);
+                    }
                     
                     html += `
                         <tr>
-                            <th>${label}</th>
+                            <th>${headerLabel}</th>
                             <td>${displayValue}</td>
                         </tr>`;
                 }
             });
             html += `</tbody></table></div>`;
         });
-        resArea.innerHTML = html;
+        
+        resArea.innerHTML = html || '<div class="no-data">找不到該學生的資料</div>';
     });
 
     // 姓名遮罩功能
     function maskName(n) {
         if (!n || typeof n !== 'string' || n.length < 2) return n;
-        return n.length === 2 ? n[0] + "○" : n[0] + "○" + n.substring(2);
+        if (n.length === 2) return n[0] + "○";
+        return n[0] + "○" + n.substring(2);
     }
 
-    // 啟動系統
-    init();
+    // 初始執行
+    fetchData();
+
 </script>
 
 </body>
