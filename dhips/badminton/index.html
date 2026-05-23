@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>羽球隊公告查詢系統</title>
+
+    <style>
+        body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 15px; }
+        
+        #announcement { 
+            color: #0056b3; font-weight: bold; font-size: 1.1em; margin-bottom: 20px; 
+            white-space: pre-wrap; line-height: 1.6; text-align: center;
+            background: #eef6ff; padding: 15px; border-radius: 8px;
+        }
+
+        /* 分頁按鈕樣式 */
+        .tab-container { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
+        .tab-btn { 
+            padding: 10px 20px; border: none; background: #e9ecef; cursor: pointer; 
+            border-radius: 5px 5px 0 0; font-weight: bold; transition: 0.3s;
+        }
+        .tab-btn.active { background: #2c3e50; color: white; }
+        .tab-btn:hover { background: #dee2e6; }
+        .tab-btn.active:hover { background: #2c3e50; }
+
+        .controls { margin-bottom: 20px; background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #eee; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        select { width: 100%; padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #ced4da; }
+        
+        /* 直式表格樣式 */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #dee2e6; padding: 12px 15px; text-align: left; }
+        th { background: #f1f3f5; color: #495057; width: 35%; }
+        td { background: white; color: #333; font-weight: 500; }
+        
+        .result-block { margin-bottom: 30px; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .no-data { text-align: center; padding: 40px; color: #6c757d; font-size: 18px; }
+        .timer-info { text-align: center; font-size: 0.9em; color: #888; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px; }
+
+        .admin-btn { background: #6c757d; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; float: right; font-size: 12px; }
+        
+        /* 隱藏區塊 */
+        #mainContent, #loginOverlay, #adminPanel { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="loginOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 25px; border-radius: 10px; width: 300px; text-align: center;">
+        <h3>管理員登入</h3>
+        <input type="password" id="adminPwdInput" style="width:100%; padding:10px; margin-bottom:15px;" placeholder="請輸入密碼">
+        <div style="display: flex; justify-content: space-between;">
+            <button onclick="closeLogin()" style="background:#6c757d; color:white; border:none; padding:10px; border-radius:5px; cursor:pointer; width:45%;">取消</button>
+            <button onclick="verifyAdmin()" style="background:#007bff; color:white; border:none; padding:10px; border-radius:5px; cursor:pointer; width:45%;">登入</button>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <button class="admin-btn" onclick="openLogin()">管理登入</button>
+    <h1>羽球隊查詢系統</h1>
+    
+    <div id="userView">
+        <div id="announcement">連線中，請稍候...</div>
+        
+        <div id="mainContent">
+            <!-- 分頁按鈕區域 -->
+            <div id="tabBar" class="tab-container"></div>
+
+            <div class="controls">
+                <label id="selectLabel">請先選擇分頁</label>
+                <select id="dataSelect">
+                    <option value="">-- 請選擇學生姓名 --</option>
+                </select>
+            </div>
+
+            <div id="resultArea">
+                <div class="no-data">請從上方選單選擇學生</div>
+            </div>
+        </div>
+
+        <div id="timeMessage" style="display:none;"></div>
+        <div class="timer-info" id="timerInfo"></div>
+    </div>
+
+    <div id="adminPanel">
+        <h2>系統管理設定</h2>
+        <div id="adminConfigInfo" style="background:#f8f9fa; padding:15px; border-radius:5px; line-height:2;"></div>
+        <button class="admin-btn" style="float:none; margin-top:20px; width:100%; padding:15px; background:#28a745;" onclick="location.reload()">重新讀取資料</button>
+    </div>
+</div>
+
+<script>
+    // ⚠️ 請替換為你部署後的 GAS 網址
+    const API_URL = "https://script.google.com/macros/s/AKfycbwONQR7Ys4cp799bAD0W7UjLkfIv4iIBhVuwvSMKiSJiYslpLds5oTGQ3ISm50dhDw/exec";
+
+    let fullData = {};
+    let config = {};
+    let currentSheet = "";
+
+    async function init() {
+        try {
+            const response = await fetch(API_URL);
+            const json = await response.json();
+            fullData = json.data;
+            config = json.settings;
+            checkTimeAndInit();
+        } catch (e) {
+            document.getElementById("announcement").innerHTML = "<span style='color:red;'>無法讀取資料，請確認後台設定。</span>";
+        }
+    }
+
+    function checkTimeAndInit() {
+        const now = new Date();
+        const startTime = new Date(config.start);
+        const endTime = new Date(config.end);
+        const timerInfo = document.getElementById("timerInfo");
+        timerInfo.innerHTML = `查詢期間：${config.start.replace('T',' ')} ~ ${config.end.replace('T',' ')}`;
+
+        if (now < startTime) {
+            showTimeMessage(`目前尚未開放查詢。<br>開放時間：${config.start.replace('T',' ')}`);
+        } else if (now > endTime) {
+            showTimeMessage(`查詢期限已過 (${config.end.replace('T',' ')})。`);
+        } else {
+            document.getElementById("announcement").textContent = config.msg;
+            document.getElementById("mainContent").style.display = "block";
+            renderTabs();
+        }
+    }
+
+    function showTimeMessage(msg) {
+        document.getElementById("mainContent").style.display = "none";
+        document.getElementById("announcement").style.display = "none";
+        const timeMsg = document.getElementById("timeMessage");
+        timeMsg.style.display = "block";
+        timeMsg.innerHTML = `<div class="no-data">${msg}</div>`;
+    }
+
+    // 1. 自動產生分頁鈕
+    function renderTabs() {
+        const tabBar = document.getElementById("tabBar");
+        tabBar.innerHTML = "";
+        const sheetNames = Object.keys(fullData);
+        
+        sheetNames.forEach((name, index) => {
+            const btn = document.createElement("button");
+            btn.className = "tab-btn";
+            btn.textContent = name;
+            btn.onclick = () => switchTab(name, btn);
+            tabBar.appendChild(btn);
+            
+            // 預設選取第一個
+            if (index === 0) switchTab(name, btn);
+        });
+    }
+
+    // 切換分頁邏輯
+    function switchTab(sheetName, btn) {
+        currentSheet = sheetName;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        document.getElementById("selectLabel").textContent = `請選擇學生姓名 (${sheetName})：`;
+        renderDropdown(sheetName);
+        document.getElementById("resultArea").innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
+    }
+
+    // 2. 以 A 欄為下拉選單內容
+    function renderDropdown(sheetName) {
+        const dataSelect = document.getElementById("dataSelect");
+        const rows = fullData[sheetName];
+        if (!rows || rows.length < 2) return;
+
+        const headers = rows[0];
+        // 取得 A 欄 (Index 0) 的所有姓名，排除標題並去重
+        const names = [...new Set(rows.slice(1).map(r => r[0]))].filter(n => n).sort();
+
+        dataSelect.innerHTML = `<option value="">-- 請選擇學生姓名 --</option>`;
+        names.forEach(name => {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = maskName(name); // 顯示遮罩後的姓名
+            dataSelect.appendChild(opt);
+        });
+    }
+
+    // 3. 顯示該學生所有非空白欄位 (直式表格)
+    document.getElementById("dataSelect").addEventListener("change", function() {
+        const name = this.value;
+        const resArea = document.getElementById("resultArea");
+        if (!name) { resArea.innerHTML = '<div class="no-data">請從上方選單選擇學生</div>'; return; }
+
+        const rows = fullData[currentSheet];
+        const headers = rows[0];
+        const studentRows = rows.filter(r => r[0] === name);
+
+        let html = "";
+        studentRows.forEach(row => {
+            html += `<div class="result-block"><table><tbody>`;
+            row.forEach((cell, idx) => {
+                const value = cell ? cell.toString().trim() : "";
+                const label = headers[idx] ? headers[idx].toString().trim() : "";
+                
+                // 只顯示非空白欄位
+                if (value !== "" && label !== "") {
+                    let displayValue = value;
+                    if (label.includes("姓名")) displayValue = maskName(value);
+                    
+                    html += `<tr><th>${label}</th><td>${displayValue}</td></tr>`;
+                }
+            });
+            html += `</tbody></table></div>`;
+        });
+        resArea.innerHTML = html;
+    });
+
+    function maskName(n) {
+        if (!n || n.length < 2) return n;
+        return n.length === 2 ? n[0] + "○" : n[0] + "○" + n.substring(2);
+    }
+
+    function openLogin() { document.getElementById('loginOverlay').style.display = 'flex'; }
+    function closeLogin() { document.getElementById('loginOverlay').style.display = 'none'; }
+    
+    function verifyAdmin() {
+        const input = document.getElementById('adminPwdInput').value;
+        if (input === config.pwd) {
+            closeLogin();
+            document.getElementById('userView').style.display = 'none';
+            document.getElementById('adminPanel').style.display = 'block';
+            document.getElementById('adminConfigInfo').innerHTML = `
+                <b>目前分頁數：</b> ${Object.keys(fullData).length} 個<br>
+                <b>公告訊息：</b> ${config.msg}<br>
+                <b>開放時間：</b> ${config.start} 至 ${config.end}
+            `;
+        } else {
+            alert("密碼錯誤");
+        }
+    }
+
+    init();
+</script>
+
+</body>
+</html>
