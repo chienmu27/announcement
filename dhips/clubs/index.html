@@ -8,8 +8,23 @@
     <style>
         body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
         .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #2c3e50; margin-bottom: 15px; position: relative; }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 10px; position: relative; }
         
+        /* 醒目的提醒文字樣式 */
+        .notice-banner {
+            text-align: center;
+            color: #d9534f;                  /* 醒目紅色/珊瑚紅 */
+            background-color: #fff3cd;       /* 淡黃色背景提示框 */
+            border: 1px solid #ffeeba;       /* 邊框 */
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: bold;
+            margin: 0 auto 20px auto;
+            max-width: 500px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
         /* 重新整理按鈕樣式 */
         .refresh-btn { 
             background: #28a745; color: white; border: none; padding: 8px 15px; 
@@ -52,6 +67,11 @@
     <button id="refreshBtn" class="refresh-btn" onclick="forceReloadAll()">🔄 強制更新資料</button>
     <h1>社團公告查詢系統 <span id="syncStatus" class="loading-tip"></span></h1>
     
+    <!-- 醒目提醒文字區塊 -->
+    <div class="notice-banner">
+        ⚠️ 資料讀取需要時間，請耐心等候
+    </div>
+
     <div id="userView">
         <div id="mainContent">
             <!-- 分頁按鈕區域 -->
@@ -77,14 +97,12 @@
     // ⚠️ 請確認您的 GAS 部署網址
     const API_URL = "https://script.google.com/macros/s/AKfycbxZ-mbXzU0SWO41DwRdMd1V04buWtlsr8Cx-I9ZuglRRUNZs3iziCs_QaREoORAmFjU/exec";
     
-    // 儲存所有分頁名稱及已載入的資料
     let sheetList = [];
     let fullData = {}; 
     let currentSheet = "";
 
     // 1. 初始化進入點
     async function init() {
-        // 先讀取本地快取（秒開）
         const cachedNames = localStorage.getItem("LOCAL_SHEET_NAMES");
         const cachedData = localStorage.getItem("LOCAL_FULL_DATA");
 
@@ -103,7 +121,6 @@
             }
         }
 
-        // 向伺服器讀取清單與第 1 個分頁（大幅縮短讀取時間至 1~2 秒）
         await fetchInitialData();
     }
 
@@ -121,11 +138,9 @@
                 return;
             }
 
-            // 儲存第 1 個工作表資料
             currentSheet = json.initialSheet;
             fullData[currentSheet] = json.data;
 
-            // 更新本機快取
             localStorage.setItem("LOCAL_SHEET_NAMES", JSON.stringify(sheetList));
             localStorage.setItem("LOCAL_FULL_DATA", JSON.stringify(fullData));
 
@@ -148,7 +163,6 @@
         btn.classList.add('active');
         document.getElementById("selectLabel").textContent = `請選擇學生姓名 (${sheetName})：`;
 
-        // 如果這個分頁尚未載入，立刻向伺服器非同步抓取
         if (!fullData[sheetName]) {
             const resArea = document.getElementById("resultArea");
             resArea.innerHTML = `<div class="no-data">正在載入【${sheetName}】資料，請稍候...</div>`;
@@ -158,7 +172,6 @@
                 const res = await fetch(`${API_URL}?sheet=${encodeURIComponent(sheetName)}`);
                 const json = await res.json();
                 fullData[sheetName] = json.data;
-                // 更新儲存
                 localStorage.setItem("LOCAL_FULL_DATA", JSON.stringify(fullData));
             } catch (e) {
                 resArea.innerHTML = `<div class="no-data" style="color:red;">載入【${sheetName}】失敗：${e.message}</div>`;
@@ -166,7 +179,6 @@
             }
         }
 
-        // 資料已齊全，渲染選單
         renderDropdown(sheetName);
         document.getElementById("resultArea").innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
     }
@@ -194,7 +206,6 @@
             return;
         }
 
-        // 取得 A 欄 (Index 0) 的學生名單，去重並排序
         const names = [...new Set(rows.slice(1).map(r => r[0]))].filter(n => n).sort();
 
         dataSelect.innerHTML = `<option value="">-- 請選擇學生姓名 --</option>`;
@@ -211,7 +222,7 @@
         displayStudentData(this.value);
     });
 
-    // 7. 顯示學生資料（直式表格）
+    // 7. 顯示學生資料
     function displayStudentData(name) {
         const resArea = document.getElementById("resultArea");
         if (!name) {
