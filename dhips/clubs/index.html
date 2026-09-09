@@ -7,10 +7,46 @@
 
     <style>
         body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-        .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #2c3e50; margin-bottom: 10px; position: relative; }
         
-        /* 醒目的提醒文字樣式 */
+        /* 容器加上 position: relative，方便右上角按鈕定位 */
+        .container { 
+            max-width: 1000px; 
+            margin: auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 10px; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1); 
+            position: relative; 
+        }
+
+        /* 標題嚴格絕對置中 */
+        h1 { 
+            text-align: center; 
+            color: #2c3e50; 
+            margin: 0 0 12px 0; 
+            padding: 0;
+            width: 100%;
+        }
+        
+        /* 重新整理按鈕改為右上角絕對定位，完全不擠壓標題 */
+        .refresh-btn { 
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            background: #28a745; 
+            color: white; 
+            border: none; 
+            padding: 8px 15px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-size: 14px;
+            transition: background 0.3s;
+            z-index: 10;
+        }
+        .refresh-btn:hover { background: #218838; }
+        .refresh-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        /* 醒目的提醒文字樣式（置中） */
         .notice-banner {
             text-align: center;
             color: #d9534f;                  /* 醒目紅色/珊瑚紅 */
@@ -20,22 +56,13 @@
             border-radius: 6px;
             font-size: 15px;
             font-weight: bold;
-            margin: 0 auto 20px auto;
+            margin: 0 auto 25px auto;
             max-width: 500px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
-        /* 重新整理按鈕樣式 */
-        .refresh-btn { 
-            background: #28a745; color: white; border: none; padding: 8px 15px; 
-            border-radius: 5px; cursor: pointer; float: right; font-size: 14px;
-            transition: background 0.3s;
-        }
-        .refresh-btn:hover { background: #218838; }
-        .refresh-btn:disabled { background: #ccc; cursor: not-allowed; }
-
         /* 分頁按鈕樣式 */
-        .tab-container { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; clear: both; }
+        .tab-container { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
         .tab-btn { 
             padding: 10px 20px; border: none; background: #e9ecef; cursor: pointer; 
             border-radius: 5px 5px 0 0; font-weight: bold; transition: 0.3s;
@@ -58,16 +85,29 @@
 
         .no-data { text-align: center; padding: 40px; color: #6c757d; font-size: 18px; }
         .status-msg { text-align: center; font-size: 0.9em; color: #888; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 10px; }
-        .loading-tip { font-size: 0.85em; color: #17a2b8; margin-left: 10px; font-weight: normal; }
+        .loading-tip { font-size: 0.5em; color: #17a2b8; vertical-align: middle; font-weight: normal; margin-left: 8px; }
+
+        /* 手機螢幕適應：螢幕太窄時按鈕移至上方置中 */
+        @media (max-width: 650px) {
+            .refresh-btn {
+                position: static;
+                display: block;
+                margin: 0 auto 15px auto;
+                float: none;
+            }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <!-- 右上角固定更新按鈕 -->
     <button id="refreshBtn" class="refresh-btn" onclick="forceReloadAll()">🔄 強制更新資料</button>
+    
+    <!-- 置中標題 -->
     <h1>社團公告查詢系統 <span id="syncStatus" class="loading-tip"></span></h1>
     
-    <!-- 醒目提醒文字區塊 -->
+    <!-- 置中醒目提醒 -->
     <div class="notice-banner">
         ⚠️ 資料讀取需要時間，請耐心等候
     </div>
@@ -156,7 +196,7 @@
         }
     }
 
-    // 3. 點選切換分頁（隨選載入核心）
+    // 3. 點選切換分頁
     async function switchTab(sheetName, btn) {
         currentSheet = sheetName;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
