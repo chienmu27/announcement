@@ -49,7 +49,7 @@
 <body>
 
 <div class="container">
-    <button id="refreshBtn" class="refresh-btn" onclick="reloadData(true)">🔄 強制更新資料</button>
+    <button id="refreshBtn" class="refresh-btn" onclick="forceReloadAll()">🔄 強制更新資料</button>
     <h1>社團公告查詢系統 <span id="syncStatus" class="loading-tip"></span></h1>
     
     <div id="userView">
@@ -65,7 +65,7 @@
             </div>
 
             <div id="resultArea">
-                <div class="no-data">正在載入資料...</div>
+                <div class="no-data">正在載入系統資料，請稍候...</div>
             </div>
         </div>
 
@@ -74,165 +74,153 @@
 </div>
 
 <script>
-    // ⚠️ 請填入部署後的 GAS 網址
+    // ⚠️ 請確認您的 GAS 部署網址
     const API_URL = "https://script.google.com/macros/s/AKfycbxZ-mbXzU0SWO41DwRdMd1V04buWtlsr8Cx-I9ZuglRRUNZs3iziCs_QaREoORAmFjU/exec";
-    const CACHE_KEY = "CLUB_NOTICE_CACHE";
-
-    let fullData = {};
+    
+    // 儲存所有分頁名稱及已載入的資料
+    let sheetList = [];
+    let fullData = {}; 
     let currentSheet = "";
 
-    // 啟動入口
+    // 1. 初始化進入點
     async function init() {
-        // 1. 先讀取本地端快取（秒開機制，約 0.05 秒完成渲染）
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
+        // 先讀取本地快取（秒開）
+        const cachedNames = localStorage.getItem("LOCAL_SHEET_NAMES");
+        const cachedData = localStorage.getItem("LOCAL_FULL_DATA");
+
+        if (cachedNames && cachedData) {
             try {
-                fullData = JSON.parse(cached);
-                renderUI();
-                setSyncStatus("（已顯示快取，正在同步最新資料...）");
+                sheetList = JSON.parse(cachedNames);
+                fullData = JSON.parse(cachedData);
+                if (sheetList.length > 0) {
+                    currentSheet = sheetList[0];
+                    renderTabs();
+                    renderDropdown(currentSheet);
+                    setTip("（已顯示快取，背景同步中...）");
+                }
             } catch (e) {
-                console.error("快取解析失敗", e);
+                console.warn("快取讀取異常", e);
             }
         }
 
-        // 2. 背景向伺服器確認並拉取最新資料
-        await loadDataFromServer(false);
+        // 向伺服器讀取清單與第 1 個分頁（大幅縮短讀取時間至 1~2 秒）
+        await fetchInitialData();
     }
 
-    // 核心讀取函式 (forceRefresh = true 代表使用者手動點按更新)
-    async function loadDataFromServer(forceRefresh = false) {
-        const refreshBtn = document.getElementById("refreshBtn");
-        refreshBtn.disabled = true;
-        refreshBtn.textContent = forceRefresh ? "正在強制更新..." : "同步中...";
-
-        try {
-            // 若為強制更新，帶入 nocache=1，通知 GAS 略過快取重讀試算表
-            const fetchUrl = forceRefresh ? `${API_URL}?nocache=1` : API_URL;
-            const response = await fetch(fetchUrl);
-            const json = await response.json();
-            
-            fullData = json.data;
-            // 存入瀏覽器快取
-            localStorage.setItem(CACHE_KEY, JSON.stringify(fullData));
-            
-            // 重新繪製 UI
-            renderUI();
-            setSyncStatus(forceRefresh ? "（資料已更新至最新）" : "");
-            setTimeout(() => setSyncStatus(""), 3000);
-        } catch (e) {
-            console.error("更新失敗：", e);
-            setSyncStatus("（同步失敗，目前顯示離線/暫存資料）");
-            // 若完全無快取且載入失敗時顯示錯誤
-            if (Object.keys(fullData).length === 0) {
-                document.getElementById("resultArea").innerHTML = `<div class="no-data" style="color:red;">連線失敗：${e.message}</div>`;
-            }
-        } finally {
-            refreshBtn.disabled = false;
-            refreshBtn.textContent = "🔄 強制更新資料";
-        }
-    }
-
-    // 更新提示小字
-    function setSyncStatus(msg) {
-        document.getElementById("syncStatus").textContent = msg;
-    }
-
-    // 手動強制重新整理
-    function reloadData(force) {
-        loadDataFromServer(force);
-    }
-
-    // 渲染整個介面 (分頁、下拉選單、表格)
-    function renderUI() {
+    // 2. 抓取初始分頁清單與第一個分頁
+    async function fetchInitialData(force = false) {
         const resArea = document.getElementById("resultArea");
-        const sheetNames = Object.keys(fullData);
+        try {
+            const url = force ? `${API_URL}?nocache=1` : API_URL;
+            const res = await fetch(url);
+            const json = await res.json();
 
-        if (sheetNames.length === 0) {
-            resArea.innerHTML = '<div class="no-data" style="color:red;">找不到任何工作表資料</div>';
-            return;
-        }
+            sheetList = json.sheetNames || [];
+            if (sheetList.length === 0) {
+                resArea.innerHTML = '<div class="no-data" style="color:red;">未發現任何可用工作表</div>';
+                return;
+            }
 
-        if (!currentSheet || !fullData[currentSheet]) {
-            currentSheet = sheetNames[0];
-        }
+            // 儲存第 1 個工作表資料
+            currentSheet = json.initialSheet;
+            fullData[currentSheet] = json.data;
 
-        renderTabs();
-        
-        const previousSelectedValue = document.getElementById("dataSelect").value;
-        renderDropdown(currentSheet);
+            // 更新本機快取
+            localStorage.setItem("LOCAL_SHEET_NAMES", JSON.stringify(sheetList));
+            localStorage.setItem("LOCAL_FULL_DATA", JSON.stringify(fullData));
 
-        if (previousSelectedValue && doesStudentExist(currentSheet, previousSelectedValue)) {
-            document.getElementById("dataSelect").value = previousSelectedValue;
-            displayStudentData(previousSelectedValue);
-        } else if (!previousSelectedValue) {
+            renderTabs();
+            renderDropdown(currentSheet);
             resArea.innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
+            setTip("");
+        } catch (err) {
+            console.error("初始讀取失敗", err);
+            if (Object.keys(fullData).length === 0) {
+                resArea.innerHTML = `<div class="no-data" style="color:red;">連線失敗：${err.message}</div>`;
+            }
         }
     }
 
-    // 檢查學生是否在當前分頁中
-    function doesStudentExist(sheetName, studentName) {
-        return fullData[sheetName] && fullData[sheetName].some(row => row[0] === studentName);
+    // 3. 點選切換分頁（隨選載入核心）
+    async function switchTab(sheetName, btn) {
+        currentSheet = sheetName;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById("selectLabel").textContent = `請選擇學生姓名 (${sheetName})：`;
+
+        // 如果這個分頁尚未載入，立刻向伺服器非同步抓取
+        if (!fullData[sheetName]) {
+            const resArea = document.getElementById("resultArea");
+            resArea.innerHTML = `<div class="no-data">正在載入【${sheetName}】資料，請稍候...</div>`;
+            document.getElementById("dataSelect").innerHTML = `<option value="">載入中...</option>`;
+            
+            try {
+                const res = await fetch(`${API_URL}?sheet=${encodeURIComponent(sheetName)}`);
+                const json = await res.json();
+                fullData[sheetName] = json.data;
+                // 更新儲存
+                localStorage.setItem("LOCAL_FULL_DATA", JSON.stringify(fullData));
+            } catch (e) {
+                resArea.innerHTML = `<div class="no-data" style="color:red;">載入【${sheetName}】失敗：${e.message}</div>`;
+                return;
+            }
+        }
+
+        // 資料已齊全，渲染選單
+        renderDropdown(sheetName);
+        document.getElementById("resultArea").innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
     }
 
-    // 自動產生分頁鈕
+    // 4. 產生分頁按鈕
     function renderTabs() {
         const tabBar = document.getElementById("tabBar");
         tabBar.innerHTML = "";
-        const sheetNames = Object.keys(fullData);
-        
-        sheetNames.forEach((name) => {
+        sheetList.forEach(name => {
             const btn = document.createElement("button");
             btn.className = "tab-btn" + (name === currentSheet ? " active" : "");
             btn.textContent = name;
             btn.onclick = () => switchTab(name, btn);
             tabBar.appendChild(btn);
         });
+        document.getElementById("selectLabel").textContent = `請選擇學生姓名 (${currentSheet})：`;
     }
 
-    // 切換分頁邏輯
-    function switchTab(sheetName, btn) {
-        currentSheet = sheetName;
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        
-        document.getElementById("selectLabel").textContent = `請選擇學生姓名 (${sheetName})：`;
-        renderDropdown(sheetName);
-        document.getElementById("resultArea").innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
-    }
-
-    // 產生學生姓名下拉選單 (A 欄)
+    // 5. 產生下拉選單
     function renderDropdown(sheetName) {
         const dataSelect = document.getElementById("dataSelect");
         const rows = fullData[sheetName];
-        if (!rows || rows.length < 1) return;
+        if (!rows || rows.length < 2) {
+            dataSelect.innerHTML = `<option value="">-- 本分頁無資料 --</option>`;
+            return;
+        }
 
-        // 取得 A 欄 (Index 0) 的所有姓名，排除標題列並去重複
+        // 取得 A 欄 (Index 0) 的學生名單，去重並排序
         const names = [...new Set(rows.slice(1).map(r => r[0]))].filter(n => n).sort();
 
         dataSelect.innerHTML = `<option value="">-- 請選擇學生姓名 --</option>`;
         names.forEach(name => {
             const opt = document.createElement("option");
             opt.value = name;
-            opt.textContent = maskName(name); 
+            opt.textContent = maskName(name);
             dataSelect.appendChild(opt);
         });
     }
 
-    // 下拉選單更動事件
+    // 6. 監聽選單變更
     document.getElementById("dataSelect").addEventListener("change", function() {
         displayStudentData(this.value);
     });
 
-    // 顯示學生資料
+    // 7. 顯示學生資料（直式表格）
     function displayStudentData(name) {
         const resArea = document.getElementById("resultArea");
-        if (!name) { 
-            resArea.innerHTML = '<div class="no-data">請從上方選單選擇學生</div>'; 
-            return; 
+        if (!name) {
+            resArea.innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
+            return;
         }
 
         const rows = fullData[currentSheet];
-        const headers = rows[0]; 
+        const headers = rows[0];
         const studentRows = rows.filter(r => r[0] === name);
 
         let html = "";
@@ -240,11 +228,9 @@
             html += `<div class="result-block"><table><tbody>`;
             headers.forEach((label, idx) => {
                 let cellValue = row[idx] !== undefined ? row[idx].toString().trim() : "";
-                
                 if (label.toString().includes("姓名")) {
                     cellValue = maskName(cellValue);
                 }
-                
                 html += `
                     <tr>
                         <th>${label || "(未命名欄位)"}</th>
@@ -260,6 +246,23 @@
     function maskName(n) {
         if (!n || n.length < 2) return n;
         return n.length === 2 ? n[0] + "○" : n[0] + "○" + n.substring(2);
+    }
+
+    // 提示狀態小字
+    function setTip(txt) {
+        document.getElementById("syncStatus").textContent = txt;
+    }
+
+    // 強制重整
+    async function forceReloadAll() {
+        const btn = document.getElementById("refreshBtn");
+        btn.disabled = true;
+        btn.textContent = "更新中...";
+        localStorage.clear();
+        fullData = {};
+        await fetchInitialData(true);
+        btn.disabled = false;
+        btn.textContent = "🔄 強制更新資料";
     }
 
     // 啟動程式
