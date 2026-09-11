@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>社團班級查詢系統</title>
+
+    <style>
+        body { font-family: "Microsoft JhengHei", Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
+        
+        .container { 
+            max-width: 1050px; 
+            margin: auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 10px; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1); 
+            position: relative; 
+        }
+
+        /* 標題嚴格絕對置中 */
+        h1 { 
+            text-align: center; 
+            color: #2c3e50; 
+            margin: 0 0 12px 0; 
+            padding: 0;
+            width: 100%;
+        }
+        
+        /* 重新整理按鈕（右上角定位） */
+        .refresh-btn { 
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            background: #28a745; 
+            color: white; 
+            border: none; 
+            padding: 8px 15px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-size: 14px;
+            transition: background 0.3s;
+            z-index: 10;
+        }
+        .refresh-btn:hover { background: #218838; }
+        .refresh-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        /* 醒目的提醒文字樣式（置中） */
+        .notice-banner {
+            text-align: center;
+            color: #d9534f;                  
+            background-color: #fff3cd;       
+            border: 1px solid #ffeeba;       
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: bold;
+            margin: 0 auto 25px auto;
+            max-width: 500px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* 分頁標籤按鈕 */
+        .tab-container { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
+        .tab-btn { 
+            padding: 9px 18px; border: none; background: #e9ecef; cursor: pointer; 
+            border-radius: 5px 5px 0 0; font-weight: bold; transition: 0.2s; font-size: 15px;
+        }
+        .tab-btn.active { background: #2c3e50; color: white; }
+        .tab-btn:hover:not(.active) { background: #dee2e6; }
+
+        .controls { margin-bottom: 20px; background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #eee; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #333; }
+        select { width: 100%; padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #ced4da; background: white; }
+        
+        /* 班級學生名冊表格 */
+        .table-responsive { width: 100%; overflow-x: auto; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; border: 1px solid #dee2e6; min-width: 600px; }
+        th, td { border: 1px solid #dee2e6; padding: 12px 14px; text-align: center; }
+        th { background: #f1f3f5; color: #495057; font-weight: bold; white-space: nowrap; }
+        tr:nth-child(even) { background: #fcfcfc; }
+        tr:hover { background: #f1f7ff; }
+
+        .summary-badge { display: inline-block; background: #e3f2fd; color: #0d47a1; padding: 4px 10px; border-radius: 20px; font-size: 14px; margin-bottom: 10px; }
+        .result-block { margin-bottom: 25px; animation: fadeIn 0.4s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .no-data { text-align: center; padding: 40px; color: #6c757d; font-size: 17px; }
+        .status-msg { text-align: center; font-size: 0.9em; color: #888; margin-top: 25px; border-top: 1px dashed #ccc; padding-top: 12px; }
+
+        @media (max-width: 650px) {
+            .refresh-btn { position: static; display: block; margin: 0 auto 15px auto; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- 右上角更新按鈕 -->
+    <button id="refreshBtn" class="refresh-btn" onclick="refreshCurrentTab()">🔄 強制更新資料</button>
+    
+    <!-- 置中標題 -->
+    <h1>社團班級查詢系統</h1>
+    
+    <!-- 置中提醒文字 -->
+    <div class="notice-banner">
+        ⚠️ 資料讀取需要時間，請耐心等候
+    </div>
+
+    <div id="userView">
+        <div id="mainContent">
+            <!-- 分頁標籤列 -->
+            <div id="tabBar" class="tab-container"></div>
+
+            <div class="controls">
+                <label id="selectLabel">請先選擇分頁</label>
+                <select id="dataSelect">
+                    <option value="">-- 請選擇班級 --</option>
+                </select>
+            </div>
+
+            <div id="resultArea">
+                <div class="no-data">正在載入社團資料，請稍候...</div>
+            </div>
+        </div>
+
+        <div class="status-msg">資料來源：東海國小體育組</div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // ⚙️ 系統設定（請務必替換為您的試算表 ID）
+    // ==========================================
+    const SPREADSHEET_ID = "1i3yhCbwtTpBhYWzB3mvj65u3z14P9heoC8__hI3G0nI";
+
+    // 社團清單（對應試算表下方各分頁名稱）
+    const SHEET_NAMES = [
+        "幼童軍", "田徑隊", "羽球隊", 
+        "直排輪A", "直排輪B", "空手道", 
+        "流行舞蹈", "積木機器創客高手"
+    ];
+
+    // 全域變數
+    let currentSheet = SHEET_NAMES[0];
+    let sheetDataCache = {}; // 記憶體快取避免重複發送請求
+
+    // 啟動入口
+    window.onload = function() {
+        renderTabs();
+        loadSheetCSV(currentSheet);
+    };
+
+    // 1. 產生分頁按鈕
+    function renderTabs() {
+        const tabBar = document.getElementById("tabBar");
+        tabBar.innerHTML = "";
+        SHEET_NAMES.forEach(name => {
+            const btn = document.createElement("button");
+            btn.className = "tab-btn" + (name === currentSheet ? " active" : "");
+            btn.textContent = name;
+            btn.onclick = () => switchTab(name, btn);
+            tabBar.appendChild(btn);
+        });
+        document.getElementById("selectLabel").textContent = `請選擇班級 (${currentSheet})：`;
+    }
+
+    // 2. 切換社團分頁
+    function switchTab(sheetName, btn) {
+        if (currentSheet === sheetName && sheetDataCache[sheetName]) return;
+
+        currentSheet = sheetName;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById("selectLabel").textContent = `請選擇班級 (${sheetName})：`;
+
+        loadSheetCSV(sheetName);
+    }
+
+    // 3. 透過 Google CSV 協定載入資料（極速 0.3 秒）
+    async function loadSheetCSV(sheetName, forceRefresh = false) {
+        const resArea = document.getElementById("resultArea");
+        const select = document.getElementById("dataSelect");
+        const refreshBtn = document.getElementById("refreshBtn");
+
+        // 若已有快取且不是強制更新，直接使用快取
+        if (!forceRefresh && sheetDataCache[sheetName]) {
+            renderClassDropdown(sheetDataCache[sheetName]);
+            resArea.innerHTML = '<div class="no-data">請從上方選單選擇班級</div>';
+            return;
+        }
+
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "載入中...";
+        select.innerHTML = '<option value="">載入中...</option>';
+        resArea.innerHTML = `<div class="no-data">正在載入【${sheetName}】名冊...</div>`;
+
+        // 構造 Google GViz CSV 匯出網址
+        const cacheBuster = forceRefresh ? `&t=${new Date().getTime()}` : "";
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}${cacheBuster}`;
+
+        try {
+            const response = await fetch(csvUrl);
+            if (!response.ok) throw new Error("無法讀取試算表，請確認試算表 ID 與共用權限");
+
+            const csvText = await response.text();
+            const rows = parseCSV(csvText);
+
+            if (!rows || rows.length < 2) {
+                resArea.innerHTML = `<div class="no-data">【${sheetName}】目前尚無資料</div>`;
+                select.innerHTML = '<option value="">-- 本分頁無資料 --</option>';
+                return;
+            }
+
+            sheetDataCache[sheetName] = rows;
+            renderClassDropdown(rows);
+            resArea.innerHTML = '<div class="no-data">請從上方選單選擇班級</div>';
+        } catch (err) {
+            console.error(err);
+            resArea.innerHTML = `<div class="no-data" style="color:red;">讀取失敗：${err.message}</div>`;
+            select.innerHTML = '<option value="">讀取失敗</option>';
+        } finally {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = "🔄 強制更新資料";
+        }
+    }
+
+    // 4. 強健的 CSV 解析函式（支援引號、逗點與換行處理）
+    function parseCSV(text) {
+        let p = '', c = '', r = [];
+        let q = false;
+        let row = [''];
+        for (let i = 0; i < text.length; i++) {
+            c = text[i];
+            let next = text[i + 1];
+            if (c === '"') {
+                if (q && next === '"') { row[row.length - 1] += '"'; i++; }
+                else { q = !q; }
+            } else if (c === ',' && !q) {
+                row.push('');
+            } else if ((c === '\r' || c === '\n') && !q) {
+                if (c === '\r' && next === '\n') { i++; }
+                r.push(row);
+                row = [''];
+            } else {
+                row[row.length - 1] += c;
+            }
+        }
+        if (row.length > 1 || row[0] !== '') {
+            r.push(row);
+        }
+        return r;
+    }
+
+    // 5. 由 A 欄資料產生「班級」下拉選單
+    function renderClassDropdown(rows) {
+        const select = document.getElementById("dataSelect");
+        // A 欄為班級（Index 0），去除標題列、去除空白並去重複排序
+        const classList = [...new Set(rows.slice(1).map(r => (r[0] || "").trim()))]
+            .filter(name => name.length > 0)
+            .sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+
+        select.innerHTML = `<option value="">-- 請選擇班級 --</option>`;
+        classList.forEach(cls => {
+            const opt = document.createElement("option");
+            opt.value = cls;
+            opt.textContent = cls;
+            select.appendChild(opt);
+        });
+    }
+
+    // 6. 監聽班級選單切換
+    document.getElementById("dataSelect").addEventListener("change", function() {
+        displayClassData(this.value);
+    });
+
+    // 7. 顯示該班級學生名單
+    function displayClassData(className) {
+        const resArea = document.getElementById("resultArea");
+        if (!className) {
+            resArea.innerHTML = '<div class="no-data">請從上方選單選擇班級</div>';
+            return;
+        }
+
+        const rows = sheetDataCache[currentSheet];
+        if (!rows || rows.length < 2) return;
+
+        const headers = rows[0]; // 標題列
+        // 篩選出 A 欄符合所選班級的所有列
+        const matchRows = rows.slice(1).filter(r => (r[0] || "").trim() === className);
+
+        if (matchRows.length === 0) {
+            resArea.innerHTML = `<div class="no-data">找不到【${className}】的學生資料</div>`;
+            return;
+        }
+
+        // 依座號排序（若有座號欄位）
+        const seatIdx = headers.findIndex(h => h.includes("座號"));
+        if (seatIdx !== -1) {
+            matchRows.sort((a, b) => (parseInt(a[seatIdx], 10) || 0) - (parseInt(b[seatIdx], 10) || 0));
+        }
+
+        let html = `
+            <div class="result-block">
+                <div class="summary-badge">查詢班級：${className} ｜ 共錄取 ${matchRows.length} 位學生</div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                ${headers.map(h => `<th>${h || "—"}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+        matchRows.forEach(row => {
+            html += `<tr>`;
+            headers.forEach((h, idx) => {
+                let cellVal = (row[idx] !== undefined ? row[idx].toString().trim() : "");
+                // 姓名欄位進行遮罩保護
+                if (h.includes("姓名")) {
+                    cellVal = maskName(cellVal);
+                }
+                html += `<td>${cellVal || "—"}</td>`;
+            });
+            html += `</tr>`;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+
+        resArea.innerHTML = html;
+    }
+
+    // 姓名遮罩邏輯
+    function maskName(name) {
+        if (!name || name.length < 2) return name;
+        if (name.length === 2) return name[0] + "○";
+        return name[0] + "○" + name.substring(2);
+    }
+
+    // 強制更新目前分頁
+    function refreshCurrentTab() {
+        delete sheetDataCache[currentSheet];
+        loadSheetCSV(currentSheet, true);
+    }
+</script>
+
+</body>
+</html>
