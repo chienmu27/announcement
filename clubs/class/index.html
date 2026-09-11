@@ -106,7 +106,7 @@
 
     <div id="userView">
         <div id="mainContent">
-            <!-- 動態分頁按鈕區域（自動依試算表分頁產生） -->
+            <!-- 動態分頁按鈕區域（自動依試算表實際分頁名稱產生） -->
             <div id="tabBar" class="tab-container"></div>
 
             <div class="controls">
@@ -127,12 +127,12 @@
 
 <script>
     // ==============================================================
-    // ⚙️ 系統設定（請務必填入您的資訊）
+    // ⚙️ 系統設定
     // ==============================================================
-    // 1. 試算表 ID（網址 /d/ 與 /edit 之間的那段文字）
-    const SPREADSHEET_ID = "1i3yhCbwtTpBhYWzB3mvj65u3z14P9heoC8__hI3G0nI";
+    // 1. 您的 Google 試算表 ID
+    const SPREADSHEET_ID = "1i3yhCbwtTpBhYWzB3mvj65u3z14P9heoC8__hI3G0nI"; // ⚠️ 若有變更請確認此處填入正確 ID
 
-    // 2. 步驟一所部署的輕量 GAS 網址（動態讀取工作表名稱）
+    // 2. 部署的 GAS 網址（動態讀取工作表名稱）
     const API_URL = "https://script.google.com/macros/s/AKfycbw7JK27mZG8_OdTk-udhb0oiaxXew6EfOtUplhIpJqgh0arwHViTRanI_Jb4ifp5RBn6w/exec";
 
     // 全域變數
@@ -142,7 +142,6 @@
 
     // 初始化啟動
     window.onload = async function() {
-        // 先讀取瀏覽器快取的工作表清單（秒開）
         const cachedNames = localStorage.getItem("CACHED_SHEET_NAMES");
         if (cachedNames) {
             try {
@@ -157,11 +156,10 @@
             }
         }
 
-        // 背景同步最新工作表清單
         await fetchSheetNames();
     };
 
-    // 1. 動態向 GAS 取得試算表中「實際存在的所有工作表名稱」
+    // 1. 動態向 GAS 取得工作表名稱清單
     async function fetchSheetNames(force = false) {
         try {
             const res = await fetch(API_URL + (force ? "?nocache=1" : ""));
@@ -171,7 +169,6 @@
                 sheetNames = json.sheets;
                 localStorage.setItem("CACHED_SHEET_NAMES", JSON.stringify(sheetNames));
 
-                // 若之前無預設或原本選取的工作表不存在，預設第一個
                 if (!currentSheet || !sheetNames.includes(currentSheet)) {
                     currentSheet = sheetNames[0];
                     renderTabs();
@@ -184,7 +181,6 @@
             }
         } catch (err) {
             console.error("無法取得工作表名稱清單：", err);
-            // 若連本機快取都沒有，提供降級備用（預設讀取 115-1）
             if (sheetNames.length === 0) {
                 sheetNames = ["115-1"];
                 currentSheet = "115-1";
@@ -194,7 +190,7 @@
         }
     }
 
-    // 2. 渲染上方分頁按鈕（例如 115-1）
+    // 2. 渲染上方分頁按鈕
     function renderTabs() {
         const tabBar = document.getElementById("tabBar");
         tabBar.innerHTML = "";
@@ -226,7 +222,6 @@
         const select = document.getElementById("dataSelect");
         const refreshBtn = document.getElementById("refreshBtn");
 
-        // 若已有快取且非強制更新，直接呈現
         if (!force && sheetDataCache[sheetName]) {
             renderClassDropdown(sheetDataCache[sheetName]);
             resArea.innerHTML = '<div class="no-data">請從上方選單選擇班級</div>';
@@ -294,13 +289,41 @@
         return r;
     }
 
-    // 6. 讀取 A 欄班級資料產生下拉選單
+    // 🎯 核心修正：將中文年級與班級轉換為數值權重，確保一年級到六年級順序正確
+    function parseClassRank(className) {
+        const cnMap = {
+            '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6,
+            '七': 7, '八': 8, '九': 9, '十': 10
+        };
+
+        // 匹配例如「三年二班」或「3年2班」
+        const match = className.match(/^([一二三四五六七八九十\d]+)年(?:([一二三四五六七八九十\d]+)班)?/);
+        if (match) {
+            const gradeRaw = match[1];
+            const classRaw = match[2] || '0';
+            const gradeNum = cnMap[gradeRaw] || parseInt(gradeRaw, 10) || 99;
+            const classNum = cnMap[classRaw] || parseInt(classRaw, 10) || 99;
+            // 年級乘 100 加上班級（例如三年四班 = 304，四年一班 = 401）
+            return gradeNum * 100 + classNum;
+        }
+        return 9999;
+    }
+
+    // 6. 讀取 A 欄班級資料產生下拉選單（套用修正後的排序）
     function renderClassDropdown(rows) {
         const select = document.getElementById("dataSelect");
-        // A 欄（Index 0）為班級，去除第一列標題、空白與重複項並排序
+        
+        // A 欄為班級，去除重複項後使用 parseClassRank 依自然數字順序排列
         const classList = [...new Set(rows.slice(1).map(r => (r[0] || "").trim()))]
             .filter(name => name.length > 0)
-            .sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+            .sort((a, b) => {
+                const rankA = parseClassRank(a);
+                const rankB = parseClassRank(b);
+                if (rankA !== rankB) {
+                    return rankA - rankB; // 依年級與班級由小到大排列
+                }
+                return a.localeCompare(b, 'zh-Hant');
+            });
 
         select.innerHTML = `<option value="">-- 請選擇班級 --</option>`;
         classList.forEach(cls => {
@@ -327,8 +350,7 @@
         const rows = sheetDataCache[currentSheet];
         if (!rows || rows.length < 2) return;
 
-        const headers = rows[0]; // 標題列
-        // 篩選 A 欄為所選班級的資料
+        const headers = rows[0]; 
         const matchRows = rows.slice(1).filter(r => (r[0] || "").trim() === className);
 
         if (matchRows.length === 0) {
@@ -336,7 +358,7 @@
             return;
         }
 
-        // 嘗試依「座號」排序
+        // 依「座號」排序
         const seatIdx = headers.findIndex(h => h.includes("座號"));
         if (seatIdx !== -1) {
             matchRows.sort((a, b) => (parseInt(a[seatIdx], 10) || 0) - (parseInt(b[seatIdx], 10) || 0));
@@ -358,7 +380,6 @@
             html += `<tr>`;
             headers.forEach((h, idx) => {
                 let cellVal = (row[idx] !== undefined ? row[idx].toString().trim() : "");
-                // 姓名欄位自動加遮罩保護
                 if (h.includes("姓名")) {
                     cellVal = maskName(cellVal);
                 }
