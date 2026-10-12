@@ -28,9 +28,12 @@
         .tab-btn.active { background: #2c3e50; color: white; }
         .tab-btn:hover { background: #dee2e6; }
 
+        /* 查詢控制區塊 */
         .controls { margin-bottom: 20px; background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #eee; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; }
-        select { width: 100%; padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #ced4da; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #333; }
+        select { width: 100%; padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #ced4da; box-sizing: border-box; }
+        .select-group { margin-bottom: 15px; }
+        .select-group:last-child { margin-bottom: 0; }
         
         /* 直式表格樣式 */
         table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #dee2e6; }
@@ -48,7 +51,7 @@
 <body>
 
 <div class="container">
-    <button id="refreshBtn" class="refresh-btn" onclick="reloadData()">🔄 更新資料</button>
+    <button id="refreshBtn" class="refresh-btn" onclick="reloadData()">🔄 重新整理資料</button>
     <h1>羽球隊查詢系統</h1>
     
     <div id="userView">
@@ -57,10 +60,21 @@
             <div id="tabBar" class="tab-container"></div>
 
             <div class="controls">
-                <label id="selectLabel">請先選擇分頁</label>
-                <select id="dataSelect">
-                    <option value="">-- 請選擇學生姓名 --</option>
-                </select>
+                <!-- 第一步：選擇年級 -->
+                <div class="select-group">
+                    <label id="gradeLabel" for="gradeSelect">1. 請選擇年級：</label>
+                    <select id="gradeSelect">
+                        <option value="">-- 全部年級 --</option>
+                    </select>
+                </div>
+
+                <!-- 第二步：選擇學生姓名 -->
+                <div class="select-group">
+                    <label id="selectLabel" for="dataSelect">2. 請選擇學生姓名：</label>
+                    <select id="dataSelect">
+                        <option value="">-- 請選擇學生姓名 --</option>
+                    </select>
+                </div>
             </div>
 
             <div id="resultArea">
@@ -79,12 +93,15 @@
     let fullData = {};
     let currentSheet = "";
 
-    // 初始化讀取
+    // 年級排序順序參考
+    const GRADE_ORDER = ["一年級", "二年級", "三年級", "四年級", "五年級", "六年級", "七年級", "八年級", "九年級"];
+
+    // 初始化
     async function init() {
         await loadDataFromServer();
     }
 
-    // 核心讀取函式
+    // 從後端撈取試算表資料
     async function loadDataFromServer() {
         const refreshBtn = document.getElementById("refreshBtn");
         const resArea = document.getElementById("resultArea");
@@ -99,20 +116,33 @@
 
             const sheetNames = Object.keys(fullData);
             if (sheetNames.length > 0) {
-                // 如果是第一次執行，或是原本選取的工作表消失了，預設選第一個
+                // 如果是首次載入或原工作表不存在，預設第一個工作表
                 if (!currentSheet || !fullData[currentSheet]) {
                     currentSheet = sheetNames[0];
                 }
                 
                 renderTabs();
-                // 恢復原本選擇的學生（如果有）
-                const previousSelectedValue = document.getElementById("dataSelect").value;
-                renderDropdown(currentSheet);
-                
-                if (previousSelectedValue && doesStudentExist(currentSheet, previousSelectedValue)) {
-                    document.getElementById("dataSelect").value = previousSelectedValue;
-                    displayStudentData(previousSelectedValue);
-                } else if (!previousSelectedValue) {
+
+                // 記住更新前的年級與學生選擇
+                const prevGrade = document.getElementById("gradeSelect").value;
+                const prevStudent = document.getElementById("dataSelect").value;
+
+                // 建立年級下拉選單
+                renderGradeDropdown(currentSheet);
+
+                // 若之前選擇的年級依然存在，則保留該選項
+                if (prevGrade && isOptionExists("gradeSelect", prevGrade)) {
+                    document.getElementById("gradeSelect").value = prevGrade;
+                }
+
+                // 根據年級渲染學生名單
+                renderStudentDropdown(currentSheet, document.getElementById("gradeSelect").value);
+
+                // 若之前選擇的學生依然存在，則保留並直接刷新資料
+                if (prevStudent && isOptionExists("dataSelect", prevStudent)) {
+                    document.getElementById("dataSelect").value = prevStudent;
+                    displayStudentData(prevStudent);
+                } else {
                     resArea.innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
                 }
             } else {
@@ -122,21 +152,48 @@
             resArea.innerHTML = `<div class="no-data" style="color:red;">連線失敗：${e.message}</div>`;
         } finally {
             refreshBtn.disabled = false;
-            refreshBtn.textContent = "🔄 更新資料";
+            refreshBtn.textContent = "🔄 重新整理資料";
         }
     }
 
-    // 手動重新整理按鈕點擊
     function reloadData() {
         loadDataFromServer();
     }
 
-    // 檢查學生是否還在清單中
-    function doesStudentExist(sheetName, studentName) {
-        return fullData[sheetName].some(row => row[0] === studentName);
+    function isOptionExists(selectId, value) {
+        const select = document.getElementById(selectId);
+        return Array.from(select.options).some(opt => opt.value === value);
     }
 
-    // 1. 自動產生分頁鈕
+    // 從 B 欄（班級）字串解析年級
+    function parseGrade(classStr) {
+        if (!classStr || typeof classStr !== 'string') return "其他 / 未填班級";
+        const trimmed = classStr.trim();
+        if (!trimmed) return "其他 / 未填班級";
+
+        // 匹配中文年級格式：如「一年一班」、「四年三班」
+        const cnMatch = trimmed.match(/^([一二三四五六七八九十]+)年/);
+        if (cnMatch) return cnMatch[1] + "年級";
+
+        // 匹配阿拉伯數字年級格式：如「1年4班」、「4年1班」
+        const numMatch = trimmed.match(/^([1-9]|1[0-2])年/);
+        if (numMatch) {
+            const map = { 1:"一年級", 2:"二年級", 3:"三年級", 4:"四年級", 5:"五年級", 6:"六年級" };
+            return map[numMatch[1]] || (numMatch[1] + "年級");
+        }
+
+        // 匹配三碼班級代碼：如「101」、「403」
+        const codeMatch = trimmed.match(/^([1-9])0\d/);
+        if (codeMatch) {
+            const map = { 1:"一年級", 2:"二年級", 3:"三年級", 4:"四年級", 5:"五年級", 6:"六年級" };
+            return map[codeMatch[1]] || "其他 / 未填班級";
+        }
+
+        if (trimmed.includes("年級")) return trimmed;
+        return "其他 / 未填班級";
+    }
+
+    // 1. 動態產生工作表分頁按鈕
     function renderTabs() {
         const tabBar = document.getElementById("tabBar");
         tabBar.innerHTML = "";
@@ -151,36 +208,94 @@
         });
     }
 
-    // 切換分頁邏輯
+    // 切換分頁
     function switchTab(sheetName, btn) {
         currentSheet = sheetName;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         
-        document.getElementById("selectLabel").textContent = `請選擇學生姓名 (${sheetName})：`;
-        renderDropdown(sheetName);
+        renderGradeDropdown(sheetName);
+        renderStudentDropdown(sheetName, ""); // 重設為全部年級
         document.getElementById("resultArea").innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
     }
 
-    // 2. 以 A 欄為下拉選單內容
-    function renderDropdown(sheetName) {
+    // 2. 建立年級下拉選單 (依據 B 欄)
+    function renderGradeDropdown(sheetName) {
+        const gradeSelect = document.getElementById("gradeSelect");
+        const rows = fullData[sheetName];
+        if (!rows || rows.length < 2) return;
+
+        // 讀取第 2 列開始的 B 欄 (Index 1) 並解析年級
+        const gradesSet = new Set();
+        rows.slice(1).forEach(row => {
+            const className = row[1] ? row[1].toString() : "";
+            gradesSet.add(parseGrade(className));
+        });
+
+        // 排序年級
+        const sortedGrades = Array.from(gradesSet).sort((a, b) => {
+            const idxA = GRADE_ORDER.indexOf(a);
+            const idxB = GRADE_ORDER.indexOf(b);
+            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+            if (idxA !== -1) return -1;
+            if (idxB !== -1) return 1;
+            return a.localeCompare(b);
+        });
+
+        gradeSelect.innerHTML = `<option value="">-- 全部年級 --</option>`;
+        sortedGrades.forEach(grade => {
+            const opt = document.createElement("option");
+            opt.value = grade;
+            opt.textContent = grade;
+            gradeSelect.appendChild(opt);
+        });
+    }
+
+    // 年級選單變更事件：連動更新學生清單
+    document.getElementById("gradeSelect").addEventListener("change", function() {
+        renderStudentDropdown(currentSheet, this.value);
+        document.getElementById("resultArea").innerHTML = '<div class="no-data">請從上方選單選擇學生</div>';
+    });
+
+    // 3. 建立學生下拉選單 (依據 A 欄，並依年級篩選)
+    function renderStudentDropdown(sheetName, filterGrade) {
         const dataSelect = document.getElementById("dataSelect");
         const rows = fullData[sheetName];
-        if (!rows || rows.length < 1) return;
+        if (!rows || rows.length < 2) return;
 
-        // 取得 A 欄 (Index 0) 的所有姓名，排除第一列標題並去重
-        const names = [...new Set(rows.slice(1).map(r => r[0]))].filter(n => n).sort();
+        // 篩選符合年級的學生列
+        const filteredRows = rows.slice(1).filter(row => {
+            const name = row[0] ? row[0].toString().trim() : "";
+            if (!name) return false;
+            if (!filterGrade) return true; // 未選年級則全列
+            const className = row[1] ? row[1].toString() : "";
+            return parseGrade(className) === filterGrade;
+        });
+
+        // 依姓名去重並保留班級資訊供標籤顯示
+        const studentMap = new Map();
+        filteredRows.forEach(row => {
+            const name = row[0].toString().trim();
+            const className = row[1] ? row[1].toString().trim() : "";
+            if (!studentMap.has(name)) {
+                studentMap.set(name, className);
+            }
+        });
 
         dataSelect.innerHTML = `<option value="">-- 請選擇學生姓名 --</option>`;
-        names.forEach(name => {
+        
+        // 排序並填入選項
+        Array.from(studentMap.keys()).sort().forEach(name => {
+            const className = studentMap.get(name);
             const opt = document.createElement("option");
             opt.value = name;
-            opt.textContent = maskName(name); 
+            // 標籤格式：王○宸 (四年一班)，方便家長快速確認
+            opt.textContent = maskName(name) + (className ? ` (${className})` : '');
             dataSelect.appendChild(opt);
         });
     }
 
-    // 3. 顯示學生資料 (直式表格，顯示所有標題)
+    // 4. 學生選單變更事件：渲染查詢結果表格
     document.getElementById("dataSelect").addEventListener("change", function() {
         displayStudentData(this.value);
     });
@@ -190,17 +305,17 @@
         if (!name) { resArea.innerHTML = '<div class="no-data">請從上方選單選擇學生</div>'; return; }
 
         const rows = fullData[currentSheet];
-        const headers = rows[0]; // 第一列為標題列
-        const studentRows = rows.filter(r => r[0] === name);
+        const headers = rows[0]; // 第一列標題列
+        const studentRows = rows.slice(1).filter(r => r[0] && r[0].toString().trim() === name);
 
         let html = "";
         studentRows.forEach(row => {
             html += `<div class="result-block"><table><tbody>`;
-            // 迴圈跑遍所有標題欄，確保每一欄都顯示
+            // 遍歷所有標題欄位，包含資料為空的儲存格皆正常顯示
             headers.forEach((label, idx) => {
-                let cellValue = row[idx] !== undefined ? row[idx].toString().trim() : "";
+                let cellValue = (row[idx] !== undefined && row[idx] !== null) ? row[idx].toString().trim() : "";
                 
-                // 姓名遮罩處理
+                // 姓名欄位進行個資遮罩
                 if (label.toString().includes("姓名")) {
                     cellValue = maskName(cellValue);
                 }
@@ -216,7 +331,7 @@
         resArea.innerHTML = html;
     }
 
-    // 姓名遮罩邏輯
+    // 姓名遮罩邏輯 (如：王佑宸 -> 王○宸；向加揚 -> 向○揚)
     function maskName(n) {
         if (!n || n.length < 2) return n;
         return n.length === 2 ? n[0] + "○" : n[0] + "○" + n.substring(2);
